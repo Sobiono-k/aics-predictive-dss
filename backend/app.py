@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return {"status": "success", "message": "AICS Predictive DSS API is running"}, 200
+    return {"status": "success", "message": "AICS Predictive DSS API is running!"}, 200
 
 def get_forecast():
     df = load_csv_data()
