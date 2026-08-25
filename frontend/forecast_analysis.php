@@ -11,6 +11,7 @@ if (!isset($_SESSION['role'])) {
 
 // 1. Database Configuration
 require_once(__DIR__ . '/../db.php');
+include 'sidebar.php';
 
 $descriptorspec = [
     0 => ["pipe", "r"],
@@ -263,7 +264,6 @@ $conn->close();
 </head>
 <body>
 
-<?php include 'sidebar.php'; ?>
 
 <!-- ══════════════════════════════════════════════════════════════
      TRAINING MODAL

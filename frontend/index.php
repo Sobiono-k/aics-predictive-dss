@@ -7,6 +7,8 @@ if (!isset($_SESSION['role'])) {
     exit();
 }
 
+include 'sidebar.php';
+
 // ─── SHARED PYTHON CONFIG ────────────────────────────────────────
 $pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
 
@@ -215,8 +217,6 @@ echo "<script>
     </style>
 </head>
 <body>
-
-<?php if(file_exists('sidebar.php')) include 'sidebar.php'; ?>
 
 <div class="main">
     <div class="header-area">
