@@ -1,0 +1,23 @@
+body { 
+    display: flex; 
+    margin: 0; 
+}
+
+.sidebar { 
+    width: 260px; 
+    height: 100vh; /* Full height of the screen */
+    background: #1e293b; 
+    position: fixed; /* Keep it locked on the left */
+    left: 0;
+    top: 0;
+    color: #fff; 
+    display: flex; 
+    flex-direction: column; 
+    z-index: 100;
+}
+
+.main { 
+    margin-left: 260px; /* This pushes the content so it doesn't hide under the sidebar */
+    padding: 40px; 
+    width: calc(100% - 260px); 
+}
