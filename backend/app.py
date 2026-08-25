@@ -1,5 +1,5 @@
 from flask import Flask, jsonify
-from preprocessing import load_data
+from preprocessing import load_csv_data
 from lstm_model import train_lstm
 from random_forest import analyze_patterns
 from regression_model import forecast_next
