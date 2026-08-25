@@ -10,17 +10,8 @@ if (!isset($_SESSION['role'])) {
 }
 
 // 1. Database Configuration
-$host = 'localhost';
-$user = 'root';
-$pass = '';
-$db   = 'aics_dss';
 
-$conn = new mysqli($host, $user, $pass, $db);
-
-// Check connection
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
+require_once(__DIR__ . '/../db.php');
 
 // ─────────────────────────────────────────────────────────────────
 // SHARED CONFIGURATION
