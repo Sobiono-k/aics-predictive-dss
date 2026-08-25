@@ -4,8 +4,7 @@
 // ─────────────────────────────────────────────────────────────────
 // SHARED CONFIGURATION (Moved to the top)
 // ─────────────────────────────────────────────────────────────────
-
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 $descriptorspec = [
     0 => ["pipe", "r"],

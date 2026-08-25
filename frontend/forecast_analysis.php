@@ -10,7 +10,7 @@ if (!isset($_SESSION['role'])) {
 }
 
 // 1. Database Configuration
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 $descriptorspec = [
     0 => ["pipe", "r"],

@@ -14,7 +14,7 @@ if (!isset($_SESSION['role'])) {
 
 $user_role = $_SESSION['role'];
 
-require_once 'db.php';
+require_once(__DIR__ . '/../db.php');
 
 if ($conn && !$conn->connect_error) {
     $query = "SELECT COUNT(*) AS total FROM applicants WHERE status = 'Pending'";

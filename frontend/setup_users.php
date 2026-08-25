@@ -1,8 +1,6 @@
 <?php
-require_once 'db.php';
-if ($conn->connect_error) {
-    die("Database Connection Failed: " . $conn->connect_error);
-}
+
+require_once(__DIR__ . '/../db.php');
 
 // 1. Re-create table with correct column length
 $sql = "CREATE TABLE IF NOT EXISTS users (

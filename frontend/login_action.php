@@ -1,8 +1,7 @@
 <?php
 session_start();
 
-require_once 'db.php';
-
+require_once(__DIR__ . '/../db.php');
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $user_input = trim($_POST['username']);

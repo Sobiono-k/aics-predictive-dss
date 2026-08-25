@@ -7,8 +7,8 @@
 }
     $bgPath = '../images/dswdlogo1.jpg';
     $logoPath = '../images/dswdlogo.png'; 
-
-   require_once 'db.php';
+    
+require_once(__DIR__ . '/../db.php');
 
     $token = $_GET['token'] ?? '';
     $tokenValid = false;

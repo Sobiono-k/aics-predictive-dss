@@ -1,6 +1,6 @@
 <?php $current_page = 'new_applicant.php'; 
 
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 session_start(); // THIS MUST BE THE VERY FIRST LINE
 

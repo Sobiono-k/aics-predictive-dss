@@ -2,8 +2,7 @@
 // fetch_pending_details.php
 // Called via AJAX from lookup_applicant.php to show full details of a pending applicant
 require_once 'auth.php';
-
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 if (isset($_POST['id'])) {
     $id = (int)$_POST['id'];

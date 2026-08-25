@@ -3,7 +3,7 @@
 // Opens in a new window — printable DSWD-styled profile of a pending applicant
 require_once 'auth.php';
 
-require_once 'db.php';
+require_once(__DIR__ . '/../db.php');
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if (!$id) { echo "Invalid request."; exit(); }

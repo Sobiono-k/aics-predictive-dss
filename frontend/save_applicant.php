@@ -1,7 +1,7 @@
 <?php
 // save_applicant.php
 
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);

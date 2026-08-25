@@ -78,7 +78,7 @@ if (!$rfData) {
 }
 
 // ─── DATABASE ────────────────────────────────────────────────────
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 $columns_res = $conn->query("SHOW COLUMNS FROM aics_sample_data");
 $cols = [];

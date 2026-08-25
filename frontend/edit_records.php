@@ -8,7 +8,7 @@ session_start();
 $current_role = $_SESSION['role'];
 
 // 1. Database Configuration
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 // --- AUDIT TRAIL HELPER FUNCTION ---
 function logChange($conn, $record_id, $column, $old_val, $new_val) {

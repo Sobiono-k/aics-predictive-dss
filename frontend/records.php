@@ -14,7 +14,7 @@ ini_set('display_errors', 1);
 require_once 'auth.php';
 
 // 1. Database Configuration
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 // --- ACTIVE FILTERS RESOLUTION ---
 $search = isset($_GET['search']) ? $conn->real_escape_string($_GET['search']) : '';

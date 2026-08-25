@@ -1,6 +1,6 @@
 <?php
 // 1. Database Configuration (Matches your records.php)
-require_once __DIR__ . '/db.php';
+require_once(__DIR__ . '/../db.php');
 
 if (isset($_POST['id'])) {
     $record_id = (int)$_POST['id'];
