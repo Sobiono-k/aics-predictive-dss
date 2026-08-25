@@ -10,16 +10,28 @@ if (!isset($_SESSION['role'])) {
 }
 
 // 1. Database Configuration
-require_once(__DIR__ . '/../db.php');
-include 'sidebar.php';
+$host = 'localhost';
+$user = 'root';
+$pass = '';
+$db   = 'aics_dss';
+
+$conn = new mysqli($host, $user, $pass, $db);
+
+// Check connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SHARED CONFIGURATION
+// ─────────────────────────────────────────────────────────────────
+$pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
 
 $descriptorspec = [
     0 => ["pipe", "r"],
     1 => ["pipe", "w"],
     2 => ["pipe", "w"],
 ];
-// Define the Python executable path
-$pythonPath = 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe';
 
 $env = [
     'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
@@ -33,10 +45,8 @@ $env = [
 // ─────────────────────────────────────────────────────────────────
 $rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
 
-$rfCmd = [$pythonPath, $rfScriptPath];
-
 $rfProcess = proc_open(
-    $rfCmd,
+    '"'.$pythonPath.'" "'.$rfScriptPath.'"',
     $descriptorspec,
     $rfPipes,
     __DIR__,
@@ -87,17 +97,7 @@ if (!$rfData) {
 // ─────────────────────────────────────────────────────────────────
 $scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
 
-$cmd = [$pythonPath, $scriptPath];
-
-$process = proc_open(
-    $cmd, 
-    $descriptorspec, 
-    $pipes, 
-    __DIR__, 
-    $env, 
-    ['bypass_shell' => true]
-);
-
+$process   = proc_open('"'.$pythonPath.'" "'.$scriptPath.'"', $descriptorspec, $pipes, __DIR__, $env, ['bypass_shell' => true]);
 $jsonData  = '';
 $errorData = '';
 
@@ -264,6 +264,7 @@ $conn->close();
 </head>
 <body>
 
+<?php include 'sidebar.php'; ?>
 
 <!-- ══════════════════════════════════════════════════════════════
      TRAINING MODAL
