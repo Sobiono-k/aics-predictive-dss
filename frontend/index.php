@@ -7,6 +7,8 @@ if (!isset($_SESSION['role'])) {
     exit();
 }
 
+require_once(__DIR__ . '/../db.php');
+
 include 'sidebar.php';
 
 // ─── SHARED PYTHON CONFIG ────────────────────────────────────────
@@ -27,17 +29,27 @@ $env = [
 
 // ─── PIPELINE A: LSTM ────────────────────────────────────────────
 $lstmScriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
-$lstmProcess    = proc_open('"'.$pythonPath.'" "'.$lstmScriptPath.'"', $descriptorspec, $lstmPipes, __DIR__, $env, ['bypass_shell' => true]);
-$lstmJsonData   = '';
-$lstmErrorData  = '';
+// Pass executable and script as an array to prevent Windows path quoting errors
+$lstmProcess = proc_open(
+    [$pythonPath, $lstmScriptPath], 
+    $descriptorspec, 
+    $lstmPipes, 
+    __DIR__, 
+    $env
+);
+$lstmJsonData  = '';
+$lstmErrorData = '';
 
 if (is_resource($lstmProcess)) {
     $lstmJsonData  = stream_get_contents($lstmPipes[1]);
     $lstmErrorData = stream_get_contents($lstmPipes[2]);
-    fclose($lstmPipes[0]); fclose($lstmPipes[1]); fclose($lstmPipes[2]);
+    fclose($lstmPipes[0]); 
+    fclose($lstmPipes[1]); 
+    fclose($lstmPipes[2]);
     proc_close($lstmProcess);
 }
 
+// Optional debugging fallback: if json data is empty, log or check $lstmErrorData
 $lstmStart = strpos($lstmJsonData, '{');
 if ($lstmStart !== false && $lstmStart > 0) $lstmJsonData = substr($lstmJsonData, $lstmStart);
 $lstmData = json_decode($lstmJsonData, true);
@@ -57,12 +69,23 @@ foreach (($lstmData['monthly']['forecast'] ?? []) as $fv) {
 
 // ─── PIPELINE B: RANDOM FOREST ───────────────────────────────────
 $rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
-$rfProcess    = proc_open('"'.$pythonPath.'" "'.$rfScriptPath.'"', $descriptorspec, $rfPipes, __DIR__, $env, ['bypass_shell' => true]);
-$rfJsonData   = '';
+// Pass executable and script as an array here as well
+$rfProcess = proc_open(
+    [$pythonPath, $rfScriptPath], 
+    $descriptorspec, 
+    $rfPipes, 
+    __DIR__, 
+    $env
+);
+$rfJsonData  = '';
+$rfErrorData = '';
 
 if (is_resource($rfProcess)) {
-    $rfJsonData = stream_get_contents($rfPipes[1]);
-    fclose($rfPipes[0]); fclose($rfPipes[1]); fclose($rfPipes[2]);
+    $rfJsonData  = stream_get_contents($rfPipes[1]);
+    $rfErrorData = stream_get_contents($rfPipes[2]);
+    fclose($rfPipes[0]); 
+    fclose($rfPipes[1]); 
+    fclose($rfPipes[2]);
     proc_close($rfProcess);
 }
 
@@ -78,9 +101,6 @@ if (!$rfData) {
         if (!isset($rfData[$g]['hotspots'])) $rfData[$g]['hotspots'] = [];
     }
 }
-
-// ─── DATABASE ────────────────────────────────────────────────────
-require_once(__DIR__ . '/../db.php');
 
 $columns_res = $conn->query("SHOW COLUMNS FROM aics_sample_data");
 $cols = [];
