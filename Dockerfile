@@ -5,7 +5,10 @@ RUN a2enmod rewrite
 
 # Copy entire project directory structure
 COPY . /var/www/html/
-COPY images/ /var/www/html/images/
+
+# Copy images folder directly into the frontend directory so Apache can serve them
+COPY images/ /var/www/html/frontend/images/
+
 # Update Apache DocumentRoot to point to the frontend folder
 ENV APACHE_DOCUMENT_ROOT /var/www/html/frontend
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
