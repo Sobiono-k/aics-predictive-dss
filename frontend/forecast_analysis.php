@@ -17,6 +17,8 @@ $descriptorspec = [
     1 => ["pipe", "w"],
     2 => ["pipe", "w"],
 ];
+// Define the Python executable path
+$pythonPath = 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe';
 
 $env = [
     'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
@@ -30,8 +32,10 @@ $env = [
 // ─────────────────────────────────────────────────────────────────
 $rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
 
+$rfCmd = [$pythonPath, $rfScriptPath];
+
 $rfProcess = proc_open(
-    '"'.$pythonPath.'" "'.$rfScriptPath.'"',
+    $rfCmd,
     $descriptorspec,
     $rfPipes,
     __DIR__,
@@ -82,7 +86,17 @@ if (!$rfData) {
 // ─────────────────────────────────────────────────────────────────
 $scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
 
-$process   = proc_open('"'.$pythonPath.'" "'.$scriptPath.'"', $descriptorspec, $pipes, __DIR__, $env, ['bypass_shell' => true]);
+$cmd = [$pythonPath, $scriptPath];
+
+$process = proc_open(
+    $cmd, 
+    $descriptorspec, 
+    $pipes, 
+    __DIR__, 
+    $env, 
+    ['bypass_shell' => true]
+);
+
 $jsonData  = '';
 $errorData = '';
 

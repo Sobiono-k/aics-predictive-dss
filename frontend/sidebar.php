@@ -16,15 +16,6 @@ $user_role = $_SESSION['role'];
 
 require_once(__DIR__ . '/../db.php');
 
-if ($conn && !$conn->connect_error) {
-    $query = "SELECT COUNT(*) AS total FROM applicants WHERE status = 'Pending'";
-    if ($result = $conn->query($query)) {
-        $row = $result->fetch_assoc();
-        $pending_count = $row['total'] ?? 0;
-        $result->free();
-    }
-    $conn->close();
-}
 ?>
 <div class="sidebar">
     <div class="sidebar-header" style="padding: 30px 20px;">
