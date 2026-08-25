@@ -36,13 +36,13 @@ $env = [
 // ─────────────────────────────────────────────────────────────────
 $rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
 
+// Pass arguments as an array to prevent shell invocation errors on Windows
 $rfProcess = proc_open(
-    '"'.$pythonPath.'" "'.$rfScriptPath.'"',
+    [$pythonPath, $rfScriptPath],
     $descriptorspec,
     $rfPipes,
     __DIR__,
-    $env,
-    ['bypass_shell' => true]
+    $env
 );
 
 $rfJsonData  = '';
@@ -88,8 +88,15 @@ if (!$rfData) {
 // ─────────────────────────────────────────────────────────────────
 $scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
 
-$process   = proc_open('"'.$pythonPath.'" "'.$scriptPath.'"', $descriptorspec, $pipes, __DIR__, $env, ['bypass_shell' => true]);
-$jsonData  = '';
+// Pass arguments as an array here as well
+$process = proc_open(
+    [$pythonPath, $scriptPath],
+    $descriptorspec,
+    $pipes,
+    __DIR__,
+    $env
+);
+
 $errorData = '';
 
 if (is_resource($process)) {
