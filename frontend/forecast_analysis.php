@@ -13,6 +13,8 @@ if (!isset($_SESSION['role'])) {
 
 require_once(__DIR__ . '/../db.php');
 
+include 'sidebar.php';
+
 // ─────────────────────────────────────────────────────────────────
 // SHARED CONFIGURATION
 // ─────────────────────────────────────────────────────────────────
@@ -261,8 +263,6 @@ $conn->close();
     </style>
 </head>
 <body>
-
-<?php include 'sidebar.php'; ?>
 
 <!-- ══════════════════════════════════════════════════════════════
      TRAINING MODAL
