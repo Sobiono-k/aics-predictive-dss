@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from preprocessing import load_csv_data
-from lstm_model import train_lstm
+from lstm_model import run_lstm
 from random_forest import analyze_patterns
 from regression_model import forecast_next
 
@@ -8,10 +8,10 @@ app = Flask(__name__)
 
 @app.route('/api/forecast', methods=['GET'])
 def get_forecast():
-    df = load_data()
+    df = load_csv_data()
     
     # LSTM forecast
-    lstm_forecast = train_lstm()
+    lstm_forecast = run_lstm()
     
     # Random Forest pattern analysis
     cause_patterns = analyze_patterns()

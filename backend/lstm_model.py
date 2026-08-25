@@ -1,6 +1,13 @@
 import os
-os.environ['USERPROFILE']          = r'C:\Windows\Temp'
-os.environ['HOME']                 = r'C:\Windows\Temp'
+import tempfile
+
+# Set cache/temp directory safely cross-platform
+if os.name == 'nt':
+    os.environ['USERPROFILE'] = r'C:\Windows\Temp'
+    os.environ['HOME']        = r'C:\Windows\Temp'
+else:
+    os.environ['HOME']        = tempfile.gettempdir()
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS']= '0'
 
@@ -219,7 +226,8 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
 # MAIN
 # ─────────────────────────────────────────────────────────────────
 
-def run_lstm():
+def train_lstm():
+    """Main training function imported and called by app.py."""
     daily = load_base_series()
 
     # ── WEEKLY ──
@@ -253,16 +261,19 @@ def run_lstm():
         label_fmt      = '%Y',
     )
 
-    output = {
+    return {
         "weekly":  weekly,
         "monthly": monthly,
         "yearly":  yearly,
     }
 
-    sys.stdout.write(json.dumps(output))
-    sys.stdout.flush()
-    sys.exit(0)
+
+# Alias for backwards compatibility if needed
+run_lstm = train_lstm
 
 
 if __name__ == "__main__":
-    run_lstm()
+    output = train_lstm()
+    sys.stdout.write(json.dumps(output))
+    sys.stdout.flush()
+    sys.exit(0)
