@@ -341,50 +341,62 @@ def build_kpi_cards(df, top_causes):
 
 
 # ─────────────────────────────────────────────────────────────────
-# MAIN PIPELINE ENTRYPOINT
+# PUBLIC API ENTRYPOINT (Imported by backend/app.py)
+# ─────────────────────────────────────────────────────────────────
+def analyze_patterns():
+    """
+    Main entrypoint function invoked by app.py. 
+    Loads dataset, trains the Random Forest model, and generates structured payload.
+    """
+    df, le_cause, feature_cols, top_causes = load_and_prepare()
+
+    if df is None or len(top_causes) == 0:
+        raise ValueError("Empty or unusable dataset after cleaning.")
+
+    if len(df) < MIN_SAMPLES:
+        raise ValueError(f"Need at least {MIN_SAMPLES} rows; got {len(df)}.")
+
+    rf, cv_accuracy = train_model(df, le_cause, feature_cols)
+
+    w_pred, w_hot = generate_window_metrics(
+        df, top_causes, rf, le_cause, cv_accuracy, feature_cols,
+        days_window=7,   multiplier=1.08
+    )
+    m_pred, m_hot = generate_window_metrics(
+        df, top_causes, rf, le_cause, cv_accuracy, feature_cols,
+        days_window=30,  multiplier=1.15
+    )
+    y_pred, y_hot = generate_window_metrics(
+        df, top_causes, rf, le_cause, cv_accuracy, feature_cols,
+        days_window=365, multiplier=1.25
+    )
+
+    kpi_cards = build_kpi_cards(df, top_causes)
+
+    payload = {}
+    payload.update(kpi_cards)
+    payload["weekly"]  = {"predictions": w_pred, "hotspots": w_hot}
+    payload["monthly"] = {"predictions": m_pred, "hotspots": m_hot}
+    payload["yearly"]  = {"predictions": y_pred, "hotspots": y_hot}
+    payload["_model_meta"] = {
+        "cv_accuracy":         round(cv_accuracy, 4),
+        "training_rows":       len(df),
+        "feature_cols":        feature_cols,
+        "feature_importances": {
+            col: round(float(imp), 4)
+            for col, imp in zip(feature_cols, rf.feature_importances_)
+        } if rf is not None else {},
+    }
+
+    return payload
+
+
+# ─────────────────────────────────────────────────────────────────
+# CLI PIPELINE EXECUTION (Subprocess / Direct script running)
 # ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     try:
-        df, le_cause, feature_cols, top_causes = load_and_prepare()
-
-        if df is None or len(top_causes) == 0:
-            raise ValueError("Empty or unusable dataset after cleaning.")
-
-        if len(df) < MIN_SAMPLES:
-            raise ValueError(f"Need at least {MIN_SAMPLES} rows; got {len(df)}.")
-
-        rf, cv_accuracy = train_model(df, le_cause, feature_cols)
-
-        w_pred, w_hot = generate_window_metrics(
-            df, top_causes, rf, le_cause, cv_accuracy, feature_cols,
-            days_window=7,   multiplier=1.08
-        )
-        m_pred, m_hot = generate_window_metrics(
-            df, top_causes, rf, le_cause, cv_accuracy, feature_cols,
-            days_window=30,  multiplier=1.15
-        )
-        y_pred, y_hot = generate_window_metrics(
-            df, top_causes, rf, le_cause, cv_accuracy, feature_cols,
-            days_window=365, multiplier=1.25
-        )
-
-        kpi_cards = build_kpi_cards(df, top_causes)
-
-        payload = {}
-        payload.update(kpi_cards)
-        payload["weekly"]  = {"predictions": w_pred, "hotspots": w_hot}
-        payload["monthly"] = {"predictions": m_pred, "hotspots": m_hot}
-        payload["yearly"]  = {"predictions": y_pred, "hotspots": y_hot}
-        payload["_model_meta"] = {
-            "cv_accuracy":         round(cv_accuracy, 4),
-            "training_rows":       len(df),
-            "feature_cols":        feature_cols,
-            "feature_importances": {
-                col: round(float(imp), 4)
-                for col, imp in zip(feature_cols, rf.feature_importances_)
-            } if rf is not None else {},
-        }
-
+        payload = analyze_patterns()
         sys.stdout.write(json.dumps(payload))
         sys.stdout.flush()
 
