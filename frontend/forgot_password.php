@@ -15,7 +15,7 @@ date_default_timezone_set('UTC');
 $bgPath = '../images/dswdlogo1.jpg';
 $logoPath = '../images/dswdlogo.png'; 
 
-require_once 'db.php';
+require_once(__DIR__ . '/../db.php');
 
 
 // Align MySQL timezone with PHP
