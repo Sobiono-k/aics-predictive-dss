@@ -1,5 +1,5 @@
 <?php
-//sidebar.php
+// sidebar.php
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -16,6 +16,19 @@ $user_role = $_SESSION['role'];
 
 require_once(__DIR__ . '/../db.php');
 
+// Initialize and query the pending applicants count
+$pending_count = 0;
+try {
+    // Replace 'applicants' and 'Pending' with your actual table and status column values
+    $query = "SELECT COUNT(*) AS total FROM applicants WHERE status = 'Pending'";
+    $result = mysqli_query($conn, $query);
+    if ($result) {
+        $row = mysqli_fetch_assoc($result);
+        $pending_count = (int)$row['total'];
+    }
+} catch (Exception $e) {
+    $pending_count = 0;
+}
 ?>
 <div class="sidebar">
     <div class="sidebar-header" style="padding: 30px 20px;">

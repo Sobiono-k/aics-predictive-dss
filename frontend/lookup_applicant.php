@@ -9,6 +9,8 @@ require_once 'auth.php';
 
 require_once(__DIR__ . '/../db.php');
 
+$msg = null;
+
 // --- REMOVE APPLICANT ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_code'])) {
     $code = $conn->real_escape_string($_POST['delete_code']);

@@ -15,6 +15,8 @@ ini_set('display_errors', 1);
 // =========================
 require_once(__DIR__ . '/../db.php');
 
+// ❌ REMOVED: mysqli_close($conn); <-- Do not close here!
+
 
 // =========================
 // BUDGET POOL
@@ -77,9 +79,9 @@ $chartData = json_encode(array_column($allocations, 'percent') ?: []);
 $medicalLabels = json_encode(array_column($medicalCauses, 'medical_cause') ?: []);
 $medicalCounts = json_encode(array_column($medicalCauses, 'count') ?: []);
 
-$conn->close();
+// ⚠️ Note: If you have an `include 'sidebar.php';` later in this file, 
+// move $conn->close() to AFTER that include (or at the absolute end of the file).
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
