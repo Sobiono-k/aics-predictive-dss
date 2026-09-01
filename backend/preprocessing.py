@@ -2,17 +2,18 @@ import pandas as pd
 from sqlalchemy import create_engine
 import os
 
-# =========================================================
-# DATABASE CONFIGURATION
-# =========================================================
-
 DB_HOST = os.environ.get('DB_HOST', 'localhost')
 DB_USER = os.environ.get('DB_USER', 'root')
 DB_PASS = os.environ.get('DB_PASS', '')
 DB_NAME = os.environ.get('DB_NAME', 'aics_dss')
 DB_PORT = os.environ.get('DB_PORT', '3306')
 
-DB_CONNECTION = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}?ssl_mode=REQUIRED"
+# Aiven requires SSL — this forces it without needing a downloaded cert file
+DB_CONNECTION = (
+    f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    f"?ssl_mode=REQUIRED"
+)
+
 # =========================================================
 # LOAD DATA FROM MYSQL
 # =========================================================
@@ -102,8 +103,11 @@ def load_csv_data():
         return df
 
     except Exception as e:
+        import traceback
         print(f"MySQL Connection Error: {e}")
-        return pd.DataFrame()
+        print(traceback.format_exc())
+        # Re-raise so Flask's error handler captures the real reason
+        raise RuntimeError(f"load_csv_data failed: {e}")
 
 
 # =========================================================
