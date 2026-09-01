@@ -1,30 +1,35 @@
 <?php
 set_time_limit(0); // forecast_analysis.php
 
-session_start(); // THIS MUST BE THE VERY FIRST LINE
+session_start();
 if (!isset($_SESSION['role'])) {
     header("Location: login.php");
     exit();
 }
 
-// 1. Database Configuration
+// 1. Database Configuration & Visual Layout
 require_once(__DIR__ . '/../db.php');
 include 'sidebar.php';
 
 // ─────────────────────────────────────────────────────────────────
 // FETCH FORECASTS FROM LIVE RENDER PYTHON SERVICE VIA cURL
 // ─────────────────────────────────────────────────────────────────
-$rfData = null;
-$data   = null;
+$rfData   = null;
+$data     = null;
 $httpCode = 0;
 
 $renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast"; 
 $renderTrainApiUrl  = "https://aics-predictive-dss.onrender.com/api/train";
 
 $ch = curl_init($renderPythonApiUrl);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_TIMEOUT, 30); // fast now — just reading a cached file
-curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_CONNECTTIMEOUT => 15,
+    CURLOPT_SSL_VERIFYPEER => true,
+    CURLOPT_USERAGENT      => 'AICS-Predictive-DSS-PHP/1.0'
+]);
+
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
@@ -36,14 +41,15 @@ if ($httpCode === 200 && is_array($apiData)) {
     $data   = $apiData['lstm'] ?? null;
 }
 
-// If no cache exists yet (first run ever), fall back gracefully instead of dying
+// Fallback defaults if Render endpoint is warming up or returning 5xx
 if (!$rfData) {
     $rfData = [
-        "weekly" => ["predictions" => [], "hotspots" => []],
+        "weekly"  => ["predictions" => [], "hotspots" => []],
         "monthly" => ["predictions" => [], "hotspots" => []],
-        "yearly" => ["predictions" => [], "hotspots" => []]
+        "yearly"  => ["predictions" => [], "hotspots" => []]
     ];
 }
+
 if ($data === null || !isset($data['weekly'], $data['monthly'], $data['yearly'])) {
     $data = [
         'weekly'  => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
