@@ -1,6 +1,8 @@
 import os
 import tempfile
 
+
+
 # Set cache/temp directory safely cross-platform
 if os.name == 'nt':
     os.environ['USERPROFILE'] = r'C:\Windows\Temp'
@@ -86,6 +88,19 @@ def load_base_series():
     from 2022-01-01 through the last date present in the data.
     """
     df = load_csv_data()
+
+    # ── DIAGNOSTIC: remove once root cause confirmed ──
+    print(f"DEBUG load_base_series: shape={df.shape}", file=sys.stderr)
+    print(f"DEBUG load_base_series: columns={df.columns.tolist()}", file=sys.stderr)
+    print(f"DEBUG load_base_series: head=\n{df.head(3)}", file=sys.stderr)
+
+    if 'request_date' not in df.columns:
+        raise ValueError(
+            f"'request_date' column missing. Actual columns: {df.columns.tolist()}. "
+            f"DataFrame shape: {df.shape}. Check preprocessing.load_csv_data() — "
+            f"the CSV path may not exist on this server, or the file is empty/malformed."
+        )
+
     df['request_date'] = pd.to_datetime(df['request_date'])
 
     # Keep only 2022 onwards

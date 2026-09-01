@@ -1,13 +1,18 @@
 import pandas as pd
 from sqlalchemy import create_engine
+import os
 
 # =========================================================
 # DATABASE CONFIGURATION
 # =========================================================
 
-DB_CONNECTION = "mysql+pymysql://root:@localhost/aics_dss"
+DB_HOST = os.environ.get('DB_HOST', 'localhost')
+DB_USER = os.environ.get('DB_USER', 'root')
+DB_PASS = os.environ.get('DB_PASS', '')
+DB_NAME = os.environ.get('DB_NAME', 'aics_dss')
+DB_PORT = os.environ.get('DB_PORT', '3306')
 
-
+DB_CONNECTION = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}?ssl_mode=REQUIRED"
 # =========================================================
 # LOAD DATA FROM MYSQL
 # =========================================================
