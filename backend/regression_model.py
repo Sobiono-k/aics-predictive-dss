@@ -86,7 +86,6 @@ def forecast_next():
     plt.grid(True)
 
     plt.tight_layout()
-    plt.show()
 
     # =========================
     # RETURN OUTPUT
