@@ -10,109 +10,85 @@ if (!isset($_SESSION['role'])) {
 }
 
 // 1. Database Configuration
-
 require_once(__DIR__ . '/../db.php');
 
 include 'sidebar.php';
 
 // ─────────────────────────────────────────────────────────────────
-// SHARED CONFIGURATION (Cross-Platform Auto-Detection)
+// CROSS-ENVIRONMENT CONFIGURATION (Local vs Render API)
 // ─────────────────────────────────────────────────────────────────
 $isWindows = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN');
 
+$rfData = null;
+$data   = null;
+
 if ($isWindows) {
+    // ── LOCAL WINDOWS EXECUTION (Uses local proc_open) ────────────
     $pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
+    $descriptorspec = [
+        0 => ["pipe", "r"],
+        1 => ["pipe", "w"],
+        2 => ["pipe", "w"],
+    ];
     $env = [
         'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
         'SystemRoot'  => 'C:\\Windows',
         'USERPROFILE' => 'C:\\Windows\\Temp',
         'HOME'        => 'C:\\Windows\\Temp',
     ];
+
+    // Run Random Forest Locally
+    $rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
+    $rfProcess = proc_open([$pythonPath, $rfScriptPath], $descriptorspec, $rfPipes, dirname($rfScriptPath), $env);
+    if (is_resource($rfProcess)) {
+        $rfJsonData = stream_get_contents($rfPipes[1]);
+        $rfErrorData = stream_get_contents($rfPipes[2]);
+        fclose($rfPipes[0]); fclose($rfPipes[1]); fclose($rfPipes[2]);
+        proc_close($rfProcess);
+        
+        $rfStart = strpos($rfJsonData, '{');
+        if ($rfStart !== false && $rfStart > 0) $rfJsonData = substr($rfJsonData, $rfStart);
+        $rfData = json_decode($rfJsonData, true);
+    }
+
+    // Run LSTM Locally
+    $scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
+    $process = proc_open([$pythonPath, $scriptPath], $descriptorspec, $pipes, dirname($scriptPath), $env);
+    if (is_resource($process)) {
+        $jsonData = stream_get_contents($pipes[1]);
+        $errorData = stream_get_contents($pipes[2]);
+        fclose($pipes[0]); fclose($pipes[1]); fclose($pipes[2]);
+        proc_close($process);
+
+        $start = strpos($jsonData, '{');
+        if ($start !== false && $start > 0) $jsonData = substr($jsonData, $start);
+        $data = json_decode($jsonData, true);
+    }
+
 } else {
-    // Production / Linux (Render, Docker, Ubuntu, etc.)
-    // Try several common install locations in order, since "which python3"
-    // relies on PATH being set the same way inside PHP-FPM/Apache as in a shell.
-    $candidatePaths = [
-        dirname(__DIR__) . '/myenv/bin/python3',   // project venv
-        '/usr/bin/python3',
-        '/usr/local/bin/python3',
-        '/usr/bin/python3.11',
-        '/usr/bin/python3.10',
-        trim((string) shell_exec('command -v python3 2>/dev/null')),
-    ];
+    // ── LIVE RENDER DEPLOYMENT (Fetches via HTTP cURL from your Render Python Service) ──
+    // Replace with your actual deployed Render Python backend URL endpoint if different
+    $renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast"; 
 
-    $pythonPath = null;
-    foreach ($candidatePaths as $candidate) {
-        if (!empty($candidate) && (is_file($candidate) || is_executable($candidate))) {
-            $pythonPath = $candidate;
-            break;
-        }
+    $ch = curl_init($renderPythonApiUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $apiData = json_decode($response, true);
+
+    if ($httpCode === 200 && is_array($apiData)) {
+        // Map data coming from your Render Python API response payload
+        $rfData = $apiData['random_forest'] ?? null;
+        $data   = $apiData['lstm'] ?? null;
     }
-
-    // Hard stop with a clear, actionable message instead of silently
-    // continuing with undefined variables.
-    if ($pythonPath === null) {
-        die(
-            "⚠ Python 3 was not found on this server.<br>" .
-            "Checked: " . htmlspecialchars(implode(', ', array_filter($candidatePaths))) . "<br>" .
-            "This container/host likely does not have Python installed. " .
-            "Install it (e.g. <code>apt-get install python3 python3-pip</code> in your Dockerfile) " .
-            "or update the paths above to match where Python actually lives on this server."
-        );
-    }
-
-    $env = [
-        'PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
-        'HOME' => sys_get_temp_dir(),
-    ];
 }
-
-$descriptorspec = [
-    0 => ["pipe", "r"],
-    1 => ["pipe", "w"],
-    2 => ["pipe", "w"],
-];
 
 // ─────────────────────────────────────────────────────────────────
-// RUN RANDOM FOREST MODEL
+// DATA VALIDATION & FALLBACK STRUCTURES
 // ─────────────────────────────────────────────────────────────────
-$rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
-
-$rfProcess = proc_open(
-    [$pythonPath, $rfScriptPath],
-    $descriptorspec,
-    $rfPipes,
-    dirname($rfScriptPath),
-    $env
-);
-
-if (!is_resource($rfProcess)) {
-    die("⚠ Failed to launch Random Forest process. pythonPath: " . htmlspecialchars($pythonPath) . " | OS: " . PHP_OS);
-}
-
-$rfJsonData  = '';
-$rfErrorData = '';
-
-$rfJsonData  = stream_get_contents($rfPipes[1]);
-$rfErrorData = stream_get_contents($rfPipes[2]);
-
-fclose($rfPipes[0]); fclose($rfPipes[1]); fclose($rfPipes[2]);
-$rfExitCode = proc_close($rfProcess);
-
-if ($rfExitCode !== 0 && empty($rfJsonData)) {
-    die("⚠ RF script exited with code $rfExitCode and produced no output.<br>stderr: <pre>" . htmlspecialchars($rfErrorData) . "</pre>");
-}
-
-if (!empty($rfErrorData)) { echo "<pre>RF Script Error: $rfErrorData</pre>"; die(); }
-
-$rfStart = strpos($rfJsonData, '{');
-
-if ($rfStart !== false && $rfStart > 0) {
-    $rfJsonData = substr($rfJsonData, $rfStart);
-}
-
-$rfData = json_decode($rfJsonData, true);
-
 if (!$rfData) {
     $rfData = [
         "weekly" => ["predictions" => [], "hotspots" => []],
@@ -130,45 +106,17 @@ if (!$rfData) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// RUN LSTM MODEL
-// ─────────────────────────────────────────────────────────────────
-$scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
-
-$process = proc_open(
-    [$pythonPath, $scriptPath],
-    $descriptorspec,
-    $pipes,
-    dirname($scriptPath),
-    $env
-);
-
-if (!is_resource($process)) {
-    die("⚠ Failed to launch LSTM process. pythonPath: " . htmlspecialchars($pythonPath) . " | OS: " . PHP_OS);
-}
-
-$jsonData  = '';
-$errorData = '';
-
-$jsonData  = stream_get_contents($pipes[1]);
-$errorData = stream_get_contents($pipes[2]);
-fclose($pipes[0]); fclose($pipes[1]); fclose($pipes[2]);
-$exitCode = proc_close($process);
-
-$start = strpos($jsonData, '{');
-if ($start !== false && $start > 0) {
-    $jsonData = substr($jsonData, $start);
-}
-
-$data = json_decode($jsonData, true);
-
 if ($data === null || !isset($data['weekly'], $data['monthly'], $data['yearly'])) {
-    echo "<!DOCTYPE html><html><body style='background:#f0f2f5;color:#f87171;font-family:Inter,sans-serif;padding:40px;'>";
-    echo "<h2>⚠ Python model output could not be parsed</h2>";
-    echo "<b>stdout:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f59e0b;'>".htmlspecialchars($jsonData)."</pre>";
-    echo "<b>stderr:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f87171;'>".htmlspecialchars($errorData)."</pre>";
-    echo "</body></html>";
-    die();
+    if (!$isWindows) {
+        die("⚠ Failed to retrieve or parse forecast data from live Render Python API. HTTP Code: {$httpCode}");
+    } else {
+        echo "<!DOCTYPE html><html><body style='background:#f0f2f5;color:#f87171;font-family:Inter,sans-serif;padding:40px;'>";
+        echo "<h2>⚠ Python model output could not be parsed</h2>";
+        echo "<b>stdout:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f59e0b;'>".htmlspecialchars($jsonData ?? '')."</pre>";
+        echo "<b>stderr:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f87171;'>".htmlspecialchars($errorData ?? '')."</pre>";
+        echo "</body></html>";
+        die();
+    }
 }
 
 $conn->close();
