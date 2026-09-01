@@ -653,7 +653,10 @@ function renderTable() {
 // ─── Heatmap ──────────────────────────────────────────────────────
 function initHeatmap() {
     const map = L.map('map', { scrollWheelZoom: false }).setView([14.6839, 121.0860], 13);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+    L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_2piv_1_109ad880de3217bd0c322c06', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+}).addTo(map);
 
     const coordMap = {
         "Alicia":[14.6601,121.0253],"Bagong Pag-asa":[14.6544,121.0336],"Bahay Toro":[14.6713,121.0264],
