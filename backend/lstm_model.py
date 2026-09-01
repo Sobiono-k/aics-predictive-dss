@@ -2,7 +2,6 @@ import os
 import tempfile
 
 
-
 # Set cache/temp directory safely cross-platform
 if os.name == 'nt':
     os.environ['USERPROFILE'] = r'C:\Windows\Temp'
