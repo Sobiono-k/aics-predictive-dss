@@ -1,9 +1,7 @@
 <?php
-set_time_limit(0);
-// forecast_analysis.php
+set_time_limit(0); // forecast_analysis.php
 
 session_start(); // THIS MUST BE THE VERY FIRST LINE
-
 if (!isset($_SESSION['role'])) {
     header("Location: login.php");
     exit();
@@ -11,83 +9,33 @@ if (!isset($_SESSION['role'])) {
 
 // 1. Database Configuration
 require_once(__DIR__ . '/../db.php');
-
 include 'sidebar.php';
 
 // ─────────────────────────────────────────────────────────────────
-// CROSS-ENVIRONMENT CONFIGURATION (Local vs Render API)
+// FETCH FORECASTS FROM LIVE RENDER PYTHON SERVICE VIA cURL
 // ─────────────────────────────────────────────────────────────────
-$isWindows = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN');
-
 $rfData = null;
 $data   = null;
+$httpCode = 0;
 
-if ($isWindows) {
-    // ── LOCAL WINDOWS EXECUTION (Uses local proc_open) ────────────
-    $pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
-    $descriptorspec = [
-        0 => ["pipe", "r"],
-        1 => ["pipe", "w"],
-        2 => ["pipe", "w"],
-    ];
-    $env = [
-        'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
-        'SystemRoot'  => 'C:\\Windows',
-        'USERPROFILE' => 'C:\\Windows\\Temp',
-        'HOME'        => 'C:\\Windows\\Temp',
-    ];
+$renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast"; 
 
-    // Run Random Forest Locally
-    $rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
-    $rfProcess = proc_open([$pythonPath, $rfScriptPath], $descriptorspec, $rfPipes, dirname($rfScriptPath), $env);
-    if (is_resource($rfProcess)) {
-        $rfJsonData = stream_get_contents($rfPipes[1]);
-        $rfErrorData = stream_get_contents($rfPipes[2]);
-        fclose($rfPipes[0]); fclose($rfPipes[1]); fclose($rfPipes[2]);
-        proc_close($rfProcess);
-        
-        $rfStart = strpos($rfJsonData, '{');
-        if ($rfStart !== false && $rfStart > 0) $rfJsonData = substr($rfJsonData, $rfStart);
-        $rfData = json_decode($rfJsonData, true);
-    }
+$ch = curl_init($renderPythonApiUrl);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
 
-    // Run LSTM Locally
-    $scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
-    $process = proc_open([$pythonPath, $scriptPath], $descriptorspec, $pipes, dirname($scriptPath), $env);
-    if (is_resource($process)) {
-        $jsonData = stream_get_contents($pipes[1]);
-        $errorData = stream_get_contents($pipes[2]);
-        fclose($pipes[0]); fclose($pipes[1]); fclose($pipes[2]);
-        proc_close($process);
+$apiData = json_decode($response, true);
 
-        $start = strpos($jsonData, '{');
-        if ($start !== false && $start > 0) $jsonData = substr($jsonData, $start);
-        $data = json_decode($jsonData, true);
-    }
-
-} else {
-    // ── LIVE RENDER DEPLOYMENT (Fetches via HTTP cURL from your Render Python Service) ──
-    // Replace with your actual deployed Render Python backend URL endpoint if different
-    $renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast"; 
-
-    $ch = curl_init($renderPythonApiUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    $apiData = json_decode($response, true);
-
-    if ($httpCode === 200 && is_array($apiData)) {
-        // Map data coming from your Render Python API response payload
-        $rfData = $apiData['random_forest'] ?? null;
-        $data   = $apiData['lstm'] ?? null;
-    }
+if ($httpCode === 200 && is_array($apiData)) {
+    $rfData = $apiData['random_forest'] ?? null;
+    $data   = $apiData['lstm'] ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────
-// DATA VALIDATION & FALLBACK STRUCTURES
+// VALIDATION & FALLBACKS
 // ─────────────────────────────────────────────────────────────────
 if (!$rfData) {
     $rfData = [
@@ -97,31 +45,17 @@ if (!$rfData) {
     ];
 } else {
     foreach (['weekly', 'monthly', 'yearly'] as $g) {
-        if (!isset($rfData[$g])) {
-            $rfData[$g] = ["predictions" => [], "hotspots" => []];
-        }
-        if (!isset($rfData[$g]['hotspots'])) {
-            $rfData[$g]['hotspots'] = [];
-        }
+        if (!isset($rfData[$g])) $rfData[$g] = ["predictions" => [], "hotspots" => []];
+        if (!isset($rfData[$g]['hotspots'])) $rfData[$g]['hotspots'] = [];
     }
 }
 
 if ($data === null || !isset($data['weekly'], $data['monthly'], $data['yearly'])) {
-    if (!$isWindows) {
-        die("⚠ Failed to retrieve or parse forecast data from live Render Python API. HTTP Code: {$httpCode}");
-    } else {
-        echo "<!DOCTYPE html><html><body style='background:#f0f2f5;color:#f87171;font-family:Inter,sans-serif;padding:40px;'>";
-        echo "<h2>⚠ Python model output could not be parsed</h2>";
-        echo "<b>stdout:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f59e0b;'>".htmlspecialchars($jsonData ?? '')."</pre>";
-        echo "<b>stderr:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f87171;'>".htmlspecialchars($errorData ?? '')."</pre>";
-        echo "</body></html>";
-        die();
-    }
+    die("⚠ Failed to fetch or parse forecast data from your Render Python service. HTTP Code: {$httpCode}. Response: " . htmlspecialchars($response));
 }
 
 $conn->close();
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
