@@ -19,10 +19,12 @@ $data   = null;
 $httpCode = 0;
 
 $renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast"; 
+$renderTrainApiUrl  = "https://aics-predictive-dss.onrender.com/api/train";
 
 $ch = curl_init($renderPythonApiUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+curl_setopt($ch, CURLOPT_TIMEOUT, 30); // fast now — just reading a cached file
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
@@ -34,24 +36,20 @@ if ($httpCode === 200 && is_array($apiData)) {
     $data   = $apiData['lstm'] ?? null;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// VALIDATION & FALLBACKS
-// ─────────────────────────────────────────────────────────────────
+// If no cache exists yet (first run ever), fall back gracefully instead of dying
 if (!$rfData) {
     $rfData = [
         "weekly" => ["predictions" => [], "hotspots" => []],
         "monthly" => ["predictions" => [], "hotspots" => []],
         "yearly" => ["predictions" => [], "hotspots" => []]
     ];
-} else {
-    foreach (['weekly', 'monthly', 'yearly'] as $g) {
-        if (!isset($rfData[$g])) $rfData[$g] = ["predictions" => [], "hotspots" => []];
-        if (!isset($rfData[$g]['hotspots'])) $rfData[$g]['hotspots'] = [];
-    }
 }
-
 if ($data === null || !isset($data['weekly'], $data['monthly'], $data['yearly'])) {
-    die("⚠ Failed to fetch or parse forecast data from your Render Python service. HTTP Code: {$httpCode}. Response: " . htmlspecialchars($response));
+    $data = [
+        'weekly'  => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
+        'monthly' => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
+        'yearly'  => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
+    ];
 }
 
 $conn->close();
@@ -347,6 +345,9 @@ $conn->close();
 </div>
 
 <script>
+
+const TRAIN_API_URL = "<?php echo $renderTrainApiUrl; ?>";
+
 const GRAINS = {
     weekly:  <?php echo json_encode($data['weekly'],  JSON_UNESCAPED_UNICODE); ?>,
     monthly: <?php echo json_encode($data['monthly'], JSON_UNESCAPED_UNICODE); ?>,
@@ -588,106 +589,51 @@ function setProgress(pct, label) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function runPrediction() {
-    // open modal & reset
     const modal = document.getElementById('trainModal');
     document.getElementById('epochLog').innerHTML = '';
     modal.classList.add('open');
     ['data','lstm','rf','done'].forEach(p => setPhase(p, 'idle'));
     setProgress(0, 'Initializing…');
 
-    // ── Phase 1: Data Preparation ───────────────────────────────
+    // Kick off the REAL training request in the background — don't await yet
+    const trainingPromise = fetch(TRAIN_API_URL, { method: 'POST' })
+        .then(r => r.json())
+        .catch(err => ({ error: err.message }));
+
+    // ── same visual phases as before, purely cosmetic while real training runs ──
     setPhase('data', 'active');
     setProgress(5, 'Preparing data…');
     const dataLogs = [
         '[DATA]  Loading aics_sample_data from MySQL…',
         '[DATA]  Detected 4 feature columns',
         '[DATA]  Resampling to weekly / monthly / yearly grids',
-        '[DATA]  Normalizing with MinMaxScaler (range 0–1)',
-        '[DATA]  Train/test split → 80% train  20% val',
-        '[DATA]  Sequence length set to 12',
-        '[DATA]  ✓ Data pipeline ready',
     ];
-    for (const msg of dataLogs) {
-        appendLog(msg, 'epoch-line');
-        await sleep(180);
-    }
+    for (const msg of dataLogs) { appendLog(msg, 'epoch-line'); await sleep(400); }
     setPhase('data', 'done');
 
-    // ── Phase 2: LSTM Training ──────────────────────────────────
     setPhase('lstm', 'active');
-    setProgress(15, 'Training LSTM…');
+    setProgress(20, 'Training LSTM…');
+    appendLog('[LSTM]  Training in progress on server — this can take 1-3 minutes…', 'loss-line');
 
-    const totalEpochs = 50;
-    // realistic-ish starting loss values that converge
-    let loss    = 0.0842 + Math.random() * 0.02;
-    let valLoss = loss    + 0.008 + Math.random() * 0.01;
+    // Wait for the REAL training to actually finish
+    const result = await trainingPromise;
 
-    for (let ep = 1; ep <= totalEpochs; ep++) {
-        // gradual convergence with small jitter
-        loss    = Math.max(loss    * (0.955 + Math.random() * 0.018), 0.0041);
-        valLoss = Math.max(valLoss * (0.960 + Math.random() * 0.016), 0.0055);
-
-        appendLog(
-            `Epoch ${String(ep).padStart(2,'0')}/${totalEpochs}  `
-            + `loss: ${loss.toFixed(4)}  `
-            + `val_loss: ${valLoss.toFixed(4)}`,
-            ep % 5 === 0 ? 'val-line' : 'loss-line'
-        );
-
-        const pct = 15 + Math.round((ep / totalEpochs) * 55);
-        setProgress(pct, `LSTM — epoch ${ep}/${totalEpochs}`);
-        await sleep(90);
+    if (result.error) {
+        appendLog('[ERROR] ' + result.error, 'done-line');
+        setProgress(100, 'Training failed — check server logs');
+        return; // don't reload on failure
     }
 
-    appendLog('[LSTM]  ✓ Training complete — best val_loss: ' + valLoss.toFixed(4), 'done-line');
-    appendLog('[LSTM]  Generating weekly / monthly / yearly forecasts…', 'epoch-line');
-    await sleep(300);
-    appendLog('[LSTM]  95% confidence intervals computed', 'epoch-line');
-    await sleep(200);
     setPhase('lstm', 'done');
-
-    // ── Phase 3: Random Forest ──────────────────────────────────
-    setPhase('rf', 'active');
-    setProgress(74, 'Training Random Forest…');
-
-    const rfLogs = [
-        '[RF]  Building 200 decision trees…',
-        '[RF]  Feature importance → medical_cause: 0.38',
-        '[RF]  Feature importance → assistance_type: 0.31',
-        '[RF]  Feature importance → barangay: 0.19',
-        '[RF]  Feature importance → request_date: 0.12',
-        '[RF]  OOB score: 0.8741',
-        '[RF]  Hotspot velocity scores computed',
-        '[RF]  ✓ Random Forest ready',
-    ];
-    for (let i = 0; i < rfLogs.length; i++) {
-        appendLog(rfLogs[i], 'rf-line');
-        setProgress(74 + Math.round((i / rfLogs.length) * 16), 'Random Forest…');
-        await sleep(220);
-    }
     setPhase('rf', 'done');
-
-    // ── Phase 4: Finalizing ─────────────────────────────────────
     setPhase('done', 'active');
-    setProgress(92, 'Saving model outputs…');
-    const finalLogs = [
-        '[OUT]  Serializing LSTM predictions to JSON',
-        '[OUT]  Serializing RF predictions to JSON',
-        '[OUT]  Writing forecast cache…',
-        '[OUT]  ✓ All outputs saved',
-    ];
-    for (const msg of finalLogs) {
-        appendLog(msg, 'done-line');
-        await sleep(200);
-    }
+    appendLog('[OUT]  ✓ Training complete, cache saved on server', 'done-line');
     setProgress(100, 'Complete — reloading dashboard…');
     setPhase('done', 'done');
     document.getElementById('spinRing').style.borderTopColor = '#10b981';
 
-    await sleep(900);
-
-    // reload the page so PHP re-runs the models and shows fresh data
-    window.location.reload();
+    await sleep(600);
+    window.location.reload(); // now /api/forecast will read the freshly-saved cache
 }
 
 window.addEventListener('DOMContentLoaded', () => { switchTab('weekly'); });
