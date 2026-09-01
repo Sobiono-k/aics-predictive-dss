@@ -6,6 +6,10 @@ import traceback
 # LOAD DATA FROM LOCAL CSV
 # =========================================================
 
+# =========================================================
+# LOAD DATA FROM LOCAL CSV
+# =========================================================
+
 def load_csv_data():
     try:
         # Resolve path relative to this script's location
@@ -16,11 +20,25 @@ def load_csv_data():
             print(f"CSV file not found at: {csv_path}")
             return pd.DataFrame()
 
-        # Load CSV with fallback encoding for special characters
+        # Load CSV with auto-delimiter detection and comment skipping
+        read_kwargs = {
+            'sep': None,            # Auto-detect comma, semicolon, or tab
+            'engine': 'python',     # Required for sep=None
+            'comment': '#',         # Skip phpMyAdmin header comments
+            'on_bad_lines': 'skip'  # Skip stray malformed metadata lines
+        }
+
         try:
-            df = pd.read_csv(csv_path, encoding='utf-8')
-        except UnicodeDecodeError:
-            df = pd.read_csv(csv_path, encoding='latin1')
+            df = pd.read_csv(csv_path, encoding='utf-8', **read_kwargs)
+        except (UnicodeDecodeError, Exception):
+            df = pd.read_csv(csv_path, encoding='latin1', **read_kwargs)
+
+        # -------------------------------------------------
+        # CLEAN COLUMN HEADERS & DEBUG PRINT
+        # -------------------------------------------------
+        # Clean quotes and whitespace from headers
+        df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", "")
+        print("CSV Columns Found:", list(df.columns))
 
         # -------------------------------------------------
         # EMPTY DATASET CHECK
@@ -35,7 +53,8 @@ def load_csv_data():
         actual_date_col = None
 
         for col in df.columns:
-            if 'request_date' in col.lower():
+            col_str = str(col).lower()
+            if 'request_date' in col_str or 'date' in col_str:
                 actual_date_col = col
                 break
 
@@ -92,7 +111,6 @@ def load_csv_data():
         print(f"CSV Loading Error: {e}")
         print(traceback.format_exc())
         raise RuntimeError(f"load_csv_data failed: {e}")
-
 
 # =========================================================
 # CREATE TIME SERIES
