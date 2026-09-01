@@ -7,16 +7,14 @@ if (!isset($_SESSION['role'])) {
     exit();
 }
 
-// 1. Database Configuration & Visual Layout
 require_once(__DIR__ . '/../db.php');
 include 'sidebar.php';
 
-// Render backend URLs
 $renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast";
 $renderTrainApiUrl  = "https://aics-predictive-dss.onrender.com/api/train";
 
 // ─────────────────────────────────────────────────────────────────
-// FETCH REAL FORECAST FROM THE ML API (cached result of /api/train)
+// 1. TRY THE REAL ML API FIRST
 // ─────────────────────────────────────────────────────────────────
 function fetchForecastFromApi($url, $timeout = 8) {
     $ch = curl_init($url);
@@ -32,84 +30,99 @@ function fetchForecastFromApi($url, $timeout = 8) {
 
     if ($err || $httpCode !== 200 || !$response) {
         error_log("Forecast API failed (HTTP $httpCode): $err");
-        return null; // covers unreachable API AND the 404 "no cache yet" case
+        return null;
     }
-
     $decoded = json_decode($response, true);
     return (json_last_error() === JSON_ERROR_NONE) ? $decoded : null;
 }
 
-// Fallback: builds the old local approximation from raw MySQL rows.
-// Only used if the real API is unreachable or hasn't been trained yet.
+// ─────────────────────────────────────────────────────────────────
+// 2. FALLBACK: ISO-week-correct grouping + genuine future dates
+//    (only used if the real API is unreachable or not trained yet)
+// ─────────────────────────────────────────────────────────────────
+function isoWeekLabel(DateTime $dt): string {
+    $clone = clone $dt;
+    $clone->setISODate((int)$dt->format('o'), (int)$dt->format('W'));
+    return $clone->format('Y') . '-W' . $clone->format('W');
+}
+
 function buildGrainData($rows, $grain) {
-    $actual = [];
+    $groups = [];
+    $keyDates = [];
+
+    foreach ($rows as $r) {
+        $dt = new DateTime($r['request_date']);
+
+        if ($grain === 'weekly') {
+            $periodStart = clone $dt;
+            $periodStart->setISODate((int)$dt->format('o'), (int)$dt->format('W'));
+            $key = isoWeekLabel($dt);
+        } elseif ($grain === 'monthly') {
+            $periodStart = new DateTime($dt->format('Y-m-01'));
+            $key = $dt->format('Y-m');
+        } else {
+            $periodStart = new DateTime($dt->format('Y-01-01'));
+            $key = $dt->format('Y');
+        }
+
+        if (!isset($groups[$key])) {
+            $groups[$key] = 0;
+            $keyDates[$key] = $periodStart;
+        }
+        $groups[$key]++;
+    }
+
+    uksort($groups, fn($a, $b) => $keyDates[$a] <=> $keyDates[$b]);
+
+    $labels = array_keys($groups);
+    $actual = array_values($groups);
+    $nHist  = count($labels);
+
+    if ($nHist === 0) {
+        return [
+            'actual' => [], 'predicted' => [], 'forecast' => [],
+            'forecast_upper' => [], 'forecast_lower' => [], 'labels' => [],
+            'metrics' => ['mae' => 0, 'margin_of_error_95' => 0],
+        ];
+    }
+
+    $forecastSteps = $grain === 'weekly' ? 26 : ($grain === 'monthly' ? 12 : 5);
+    $decayRate     = $grain === 'weekly' ? 0.02 : ($grain === 'monthly' ? 0.03 : 0.10);
+    $bandWidth     = $grain === 'weekly' ? 0.10 : ($grain === 'monthly' ? 0.15 : 0.20);
+
+    $lastActual = end($actual);
+    $lastLabel  = array_key_last($groups);
+    $lastDate   = $keyDates[$lastLabel];
+
     $forecast = [];
     $forecastUpper = [];
     $forecastLower = [];
-    $labels = [];
+    $futureLabels = [];
+    $cursor = clone $lastDate;
 
-    if ($grain === 'weekly') {
-        $groups = [];
-        foreach ($rows as $r) {
-            $key = $r['day'];
-            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0];
-            $groups[$key]['actual']++;
+    for ($i = 1; $i <= $forecastSteps; $i++) {
+        if ($grain === 'weekly') {
+            $cursor->modify('+1 week');
+            $futureLabels[] = isoWeekLabel($cursor);
+        } elseif ($grain === 'monthly') {
+            $cursor->modify('+1 month');
+            $futureLabels[] = $cursor->format('Y-m');
+        } else {
+            $cursor->modify('+1 year');
+            $futureLabels[] = $cursor->format('Y');
         }
-        ksort($groups);
-        foreach ($groups as $label => $g) { $labels[] = $label; $actual[] = $g['actual']; }
-        $lastActual = end($actual) ?: 0;
-        for ($i = 1; $i <= 26; $i++) {
-            $forecast[] = $lastActual * (1 - 0.02 * $i);
-            $forecastUpper[] = $lastActual * (1 + 0.1 - 0.02 * $i);
-            $forecastLower[] = max(0, $lastActual * (1 - 0.15 - 0.02 * $i));
-        }
-        $mae = 0; $me = 0;
-    } elseif ($grain === 'monthly') {
-        $groups = [];
-        foreach ($rows as $r) {
-            $key = $r['month'];
-            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0];
-            $groups[$key]['actual']++;
-        }
-        ksort($groups);
-        foreach ($groups as $label => $g) { $labels[] = $label; $actual[] = $g['actual']; }
-        $lastActual = end($actual) ?: 0;
-        for ($i = 1; $i <= 12; $i++) {
-            $forecast[] = $lastActual * (1 - 0.03 * $i);
-            $forecastUpper[] = $lastActual * (1 + 0.15 - 0.03 * $i);
-            $forecastLower[] = max(0, $lastActual * (1 - 0.2 - 0.03 * $i));
-        }
-        $mae = 0; $me = 0;
-    } else { // yearly
-        $groups = [];
-        foreach ($rows as $r) {
-            $key = $r['year'];
-            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0];
-            $groups[$key]['actual']++;
-        }
-        ksort($groups);
-        foreach ($groups as $label => $g) { $labels[] = $label; $actual[] = $g['actual']; }
-        $lastYear = end($labels) ?: '2026';
-        $lastActual = end($actual) ?: 0;
-        $forecast[] = $lastActual * 0.9;
-        $forecastUpper[] = $lastActual * 1.1;
-        $forecastLower[] = max(0, $lastActual * 0.7);
-        $mae = 0; $me = 0;
+        $projected = max(0, $lastActual * (1 - $decayRate * $i));
+        $forecast[] = $projected;
+        $forecastUpper[] = $lastActual * (1 + $bandWidth - $decayRate * $i);
+        $forecastLower[] = max(0, $lastActual * (1 - $bandWidth - $decayRate * $i));
     }
 
-    // Align forecast onto the SAME label/index axis as actual, null-padded,
-    // so Chart.js plots it in the future instead of overlapping history.
-    $nHist = count($labels);
-    $paddedActual   = array_merge($actual, array_fill(0, count($forecast), null));
-    $paddedPredicted = array_map(fn($v) => $v === null ? null : $v * 0.95, $paddedActual);
-    $paddedForecast = array_merge(array_fill(0, $nHist, null), $forecast);
-    $paddedUpper    = array_merge(array_fill(0, $nHist, null), $forecastUpper);
-    $paddedLower    = array_merge(array_fill(0, $nHist, null), $forecastLower);
-
-    // Extend labels array so the x-axis actually has slots for the forecast points
-    for ($i = 1; $i <= count($forecast); $i++) {
-        $labels[] = ($grain === 'yearly') ? ((int)end($labels) + 1) : "forecast+$i";
-    }
+    $allLabels       = array_merge($labels, $futureLabels);
+    $paddedActual    = array_merge($actual, array_fill(0, $forecastSteps, null));
+    $paddedPredicted = array_map(fn($v) => $v === null ? null : round($v * 0.95, 2), $paddedActual);
+    $paddedForecast  = array_merge(array_fill(0, $nHist - 1, null), [$lastActual], $forecast);
+    $paddedUpper     = array_merge(array_fill(0, $nHist - 1, null), [$lastActual], $forecastUpper);
+    $paddedLower     = array_merge(array_fill(0, $nHist - 1, null), [$lastActual], $forecastLower);
 
     return [
         'actual'         => $paddedActual,
@@ -117,18 +130,21 @@ function buildGrainData($rows, $grain) {
         'forecast'       => $paddedForecast,
         'forecast_upper' => $paddedUpper,
         'forecast_lower' => $paddedLower,
-        'labels'         => $labels,
-        'metrics'        => ['mae' => round($mae, 2), 'margin_of_error_95' => round($me * 1.96, 2)],
+        'labels'         => $allLabels,
+        'metrics'        => ['mae' => 0, 'margin_of_error_95' => 0], // real MAE only available from the trained model
     ];
 }
 
+// ─────────────────────────────────────────────────────────────────
+// 3. DECIDE: REAL MODEL DATA vs FALLBACK
+// ─────────────────────────────────────────────────────────────────
 $apiResult = fetchForecastFromApi($renderPythonApiUrl);
 $data = null;
 $rfData = null;
 $trendForecast = null;
+$isRealModel = ($apiResult && isset($apiResult['lstm'], $apiResult['random_forest']));
 
-if ($apiResult && isset($apiResult['lstm'], $apiResult['random_forest'])) {
-    // ── REAL model output — already label-aligned + null-padded by lstm_model.py ──
+if ($isRealModel) {
     $data = $apiResult['lstm'];
 
     $rfData = [];
@@ -146,15 +162,11 @@ if ($apiResult && isset($apiResult['lstm'], $apiResult['random_forest'])) {
     $trendForecast = $apiResult['trend_forecast'] ?? null;
 
 } else {
-    // ── Fallback: real API unreachable or not trained yet ──
     $query = "SELECT
         assistance_type,
         medical_cause,
         request_date,
-        status,
-        DATE_FORMAT(request_date, '%Y') as year,
-        DATE_FORMAT(request_date, '%Y-%m') as month,
-        DATE_FORMAT(request_date, '%Y-%m-%d') as day
+        status
     FROM aics_sample_data
     ORDER BY request_date ASC";
 
@@ -195,6 +207,16 @@ if ($apiResult && isset($apiResult['lstm'], $apiResult['random_forest'])) {
     }
 }
 
+// TEMP DEBUG — visit ?debug=1 as an admin to inspect the raw API result.
+// Remove this block once you've confirmed everything works.
+if (isset($_GET['debug']) && isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
+    echo '<pre style="background:#111;color:#0f0;padding:16px;white-space:pre-wrap;">';
+    echo "isRealModel: " . ($isRealModel ? 'true' : 'false') . "\n";
+    echo "API URL: $renderPythonApiUrl\n";
+    echo "Raw API result:\n" . print_r($apiResult, true);
+    echo '</pre>';
+}
+
 $conn->close();
 ?>
 <!DOCTYPE html>
@@ -215,18 +237,14 @@ $conn->close();
             --sidebar-width: 260px;
         }
         body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg-color); display: flex; color: #334155; }
-
         .sidebar { width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); position: fixed; left: 0; top: 0; color: #fff; display: flex; flex-direction: column; z-index: 1000; }
         .sidebar-header { padding: 30px 20px; text-align: center; background: rgba(0,0,0,0.2); }
         .sidebar a { padding: 15px 25px; text-decoration: none; color: #94a3b8; display: flex; align-items: center; transition: 0.3s; border-left: 4px solid transparent; }
         .sidebar a:hover, .sidebar a.active { background: #334155; color: #fff; border-left: 4px solid #3b82f6; }
-
         .main { margin-left: var(--sidebar-width); padding: 40px; width: calc(100% - var(--sidebar-width)); min-height: 100vh; }
-
         .header-area { margin-bottom: 30px; }
         .header-area h1 { margin: 0; font-size: 22px; color: #344767; }
         .header-area p { color: #8392ab; margin: 5px 0 0; font-style: italic; }
-
         .forecast-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
         .f-card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: var(--card-shadow); }
         .full-width { grid-column: span 2; }
@@ -240,127 +258,57 @@ $conn->close();
         .chart-toggle { background: #f1f5f9; padding: 4px; border-radius: 8px; display: flex; gap: 5px; }
         .chart-toggle button { border: none; background: transparent; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; }
         .chart-toggle button.active { background: #fff; color: #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #f0f2f5; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-
-        @keyframes shimmer {
-            0%   { background-position: -800px 0; }
-            100% { background-position:  800px 0; }
-        }
-        .skeleton {
-            background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
-            background-size: 800px 100%;
-            animation: shimmer 1.4s infinite;
-            border-radius: 8px;
-        }
-
+        @keyframes shimmer { 0% { background-position: -800px 0; } 100% { background-position: 800px 0; } }
+        .skeleton { background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite; border-radius: 8px; }
         .tab-btn { cursor: pointer; border: none; font-family: 'Inter', sans-serif; }
         .tab-btn.active-tab { background: #3b82f6; color: #fff; box-shadow: 0 2px 6px rgba(59,130,246,0.35); }
-
         .lstm-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: var(--card-shadow); }
         .lstm-panel-dark { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
-
-        /* ── Predict button ── */
-        .predict-btn {
-            display: inline-flex; align-items: center; gap: 8px;
-            padding: 10px 22px; border-radius: 10px; border: none; cursor: pointer;
-            font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #6366f1);
-            color: #fff; box-shadow: 0 4px 14px rgba(99,102,241,0.35);
-            transition: opacity .2s, transform .15s;
-        }
-        .predict-btn:hover  { opacity: .92; transform: translateY(-1px); }
+        .predict-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: 10px; border: none; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; box-shadow: 0 4px 14px rgba(99,102,241,0.35); transition: opacity .2s, transform .15s; }
+        .predict-btn:hover { opacity: .92; transform: translateY(-1px); }
         .predict-btn:active { transform: translateY(0); }
-
-        /* ── Training modal overlay ── */
-        #trainModal {
-            display: none; position: fixed; inset: 0; z-index: 9999;
-            background: rgba(15,23,42,0.72); backdrop-filter: blur(4px);
-            align-items: center; justify-content: center;
-        }
+        #trainModal { display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(15,23,42,0.72); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
         #trainModal.open { display: flex; }
-
-        .train-box {
-            background: #fff; border-radius: 20px; width: 540px; max-width: 94vw;
-            padding: 32px 36px; box-shadow: 0 25px 60px rgba(0,0,0,0.22);
-            display: flex; flex-direction: column; gap: 22px;
-        }
-        .train-box h2 {
-            margin: 0; font-size: 18px; font-weight: 800; color: #1e293b;
-            display: flex; align-items: center; gap: 10px;
-        }
-
-        /* spinning ring */
+        .train-box { background: #fff; border-radius: 20px; width: 540px; max-width: 94vw; padding: 32px 36px; box-shadow: 0 25px 60px rgba(0,0,0,0.22); display: flex; flex-direction: column; gap: 22px; }
+        .train-box h2 { margin: 0; font-size: 18px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 10px; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .spin-ring {
-            width: 20px; height: 20px; border-radius: 50%;
-            border: 3px solid #e2e8f0; border-top-color: #3b82f6;
-            animation: spin .7s linear infinite; flex-shrink: 0;
-        }
-
-        /* epoch log area */
-        .epoch-log {
-            background: #0f172a; border-radius: 12px; padding: 16px;
-            font-family: 'Courier New', monospace; font-size: 12px;
-            color: #94a3b8; height: 210px; overflow-y: auto;
-            display: flex; flex-direction: column; gap: 4px;
-        }
+        .spin-ring { width: 20px; height: 20px; border-radius: 50%; border: 3px solid #e2e8f0; border-top-color: #3b82f6; animation: spin .7s linear infinite; flex-shrink: 0; }
+        .epoch-log { background: #0f172a; border-radius: 12px; padding: 16px; font-family: 'Courier New', monospace; font-size: 12px; color: #94a3b8; height: 210px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
         .epoch-log .log-line { animation: fadeIn .25s ease; }
-        .epoch-line  { color: #38bdf8; }
-        .loss-line   { color: #a78bfa; }
-        .val-line    { color: #34d399; }
-        .done-line   { color: #fbbf24; font-weight: 700; }
-        .rf-line     { color: #fb923c; }
+        .epoch-line { color: #38bdf8; }
+        .loss-line { color: #a78bfa; }
+        .val-line { color: #34d399; }
+        .done-line { color: #fbbf24; font-weight: 700; }
+        .rf-line { color: #fb923c; }
         @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
-
-        /* overall progress bar */
         .prog-wrap { display: flex; flex-direction: column; gap: 6px; }
         .prog-label { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: #64748b; }
         .prog-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; }
         .prog-fill { height: 100%; border-radius: 9999px; background: linear-gradient(90deg,#3b82f6,#6366f1); transition: width .3s ease; }
-
-        /* phase badges */
         .phase-row { display: flex; gap: 8px; flex-wrap: wrap; }
-        .phase-badge {
-            padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 700;
-            border: 1.5px solid; transition: all .3s;
-        }
-        .phase-badge.idle    { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
-        .phase-badge.active  { background: #eff6ff; color: #2563eb; border-color: #93c5fd; }
-        .phase-badge.done    { background: #f0fdf4; color: #16a34a; border-color: #86efac; }
+        .phase-badge { padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 700; border: 1.5px solid; transition: all .3s; }
+        .phase-badge.idle { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
+        .phase-badge.active { background: #eff6ff; color: #2563eb; border-color: #93c5fd; }
+        .phase-badge.done { background: #f0fdf4; color: #16a34a; border-color: #86efac; }
     </style>
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════════════════
-     TRAINING MODAL
-════════════════════════════════════════════════════════════════ -->
 <div id="trainModal">
     <div class="train-box">
-        <h2>
-            <div class="spin-ring" id="spinRing"></div>
-            Running Prediction Models
-        </h2>
-
-        <!-- Phase badges -->
+        <h2><div class="spin-ring" id="spinRing"></div>Running Prediction Models</h2>
         <div class="phase-row">
             <span class="phase-badge idle" id="phase-data">📦 Data Prep</span>
             <span class="phase-badge idle" id="phase-lstm">🧠 LSTM Training</span>
             <span class="phase-badge idle" id="phase-rf">🌲 Random Forest</span>
             <span class="phase-badge idle" id="phase-done">✅ Finalizing</span>
         </div>
-
-        <!-- Epoch / log output -->
         <div class="epoch-log" id="epochLog"></div>
-
-        <!-- Overall progress -->
         <div class="prog-wrap">
-            <div class="prog-label">
-                <span id="progPhaseLabel">Initializing…</span>
-                <span id="progPct">0%</span>
-            </div>
+            <div class="prog-label"><span id="progPhaseLabel">Initializing…</span><span id="progPct">0%</span></div>
             <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
         </div>
     </div>
@@ -368,40 +316,26 @@ $conn->close();
 
 <div class="main">
     <div class="header-area">
-        <!-- Title row with Predict button top-right -->
         <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
             <div>
                 <h1>Request Volume Forecast</h1>
                 <p>AICS Program of DSWD <i class="fas fa-chevron-right" style="font-size:10px;margin:0 5px;"></i> Batasan Hills</p>
                 <p style="margin:4px 0 0;color:#8392ab;font-size:13px;">LSTM-powered predictions — historical data 2022 – 2026 with forward projections</p>
             </div>
-            <button class="predict-btn" onclick="runPrediction()">
-                <i class="fas fa-bolt"></i> Predict Forecast
-            </button>
+            <button class="predict-btn" onclick="runPrediction()"><i class="fas fa-bolt"></i> Predict Forecast</button>
         </div>
     </div>
 
     <div style="max-width:100%; margin:0 auto; display:flex; flex-direction:column; gap:28px;">
 
-        <!-- Tab Switcher Header -->
         <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px;">
             <div style="display:inline-flex; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px; padding:4px; gap:4px;">
-                <button onclick="switchTab('weekly')" id="tab-weekly"
-                    class="tab-btn active-tab" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; transition:all .2s;">
-                    Weekly
-                </button>
-                <button onclick="switchTab('monthly')" id="tab-monthly"
-                    class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">
-                    Monthly
-                </button>
-                <button onclick="switchTab('yearly')" id="tab-yearly"
-                    class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">
-                    Yearly
-                </button>
+                <button onclick="switchTab('weekly')" id="tab-weekly" class="tab-btn active-tab" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; transition:all .2s;">Weekly</button>
+                <button onclick="switchTab('monthly')" id="tab-monthly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">Monthly</button>
+                <button onclick="switchTab('yearly')" id="tab-yearly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">Yearly</button>
             </div>
         </div>
 
-        <!-- Metric Cards -->
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px;" id="metricCards">
             <div class="skeleton" style="height:112px;"></div>
             <div class="skeleton" style="height:112px;"></div>
@@ -409,49 +343,30 @@ $conn->close();
             <div class="skeleton" style="height:112px;"></div>
         </div>
 
-        <!-- Legend -->
         <div style="display:flex; flex-wrap:wrap; gap:20px 24px; font-size:12px; color:#8392ab; padding:0 4px;">
-            <span style="display:flex;align-items:center;gap:8px;">
-                <span style="display:inline-block;width:24px;height:2px;background:#60a5fa;border-radius:2px;"></span>Actual recorded volume
-            </span>
-            <span style="display:flex;align-items:center;gap:8px;">
-                <span style="display:inline-block;width:24px;border-top:2px dashed #a78bfa;"></span>Model fit (in-sample)
-            </span>
-            <span style="display:flex;align-items:center;gap:8px;">
-                <span style="display:inline-block;width:24px;height:2px;background:#2dd4bf;border-radius:2px;"></span>Forecast (future)
-            </span>
-            <span style="display:flex;align-items:center;gap:8px;">
-                <span style="display:inline-block;width:24px;height:12px;border-radius:3px;background:rgba(20,184,166,.15);border:1px solid rgba(20,184,166,.4);"></span>95% confidence band
-            </span>
+            <span style="display:flex;align-items:center;gap:8px;"><span style="display:inline-block;width:24px;height:2px;background:#60a5fa;border-radius:2px;"></span>Actual recorded volume</span>
+            <span style="display:flex;align-items:center;gap:8px;"><span style="display:inline-block;width:24px;border-top:2px dashed #a78bfa;"></span>Model fit (in-sample)</span>
+            <span style="display:flex;align-items:center;gap:8px;"><span style="display:inline-block;width:24px;height:2px;background:#2dd4bf;border-radius:2px;"></span>Forecast (future)</span>
+            <span style="display:flex;align-items:center;gap:8px;"><span style="display:inline-block;width:24px;height:12px;border-radius:3px;background:rgba(20,184,166,.15);border:1px solid rgba(20,184,166,.4);"></span>95% confidence band</span>
         </div>
 
-        <!-- LSTM Chart -->
         <div class="lstm-panel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
                 <h3 style="margin:0;font-weight:700;color:#344767;font-size:16px;" id="chartTitle">Weekly Request Volume — 2022 to Forecast</h3>
                 <span style="font-size:12px;color:#8392ab;" id="forecastNote"></span>
             </div>
-            <div style="position:relative;">
-                <canvas id="lstmChart" style="height:400px;"></canvas>
-            </div>
+            <div style="position:relative;"><canvas id="lstmChart" style="height:400px;"></canvas></div>
         </div>
 
-        <!-- Random Forest Predictions -->
         <div class="lstm-panel" style="display:flex;flex-direction:column;gap:20px;">
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
                 <div>
                     <h3 style="margin:0;font-size:18px;font-weight:700;color:#344767;" id="rfCardTitle">Top Medical Assistance Prediction (Weekly)</h3>
                     <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">Random Forest classification results based on historical AICS assistance records</p>
                 </div>
-                <div style="background:#eef2ff;color:#6366f1;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #c7d2fe;font-family:monospace;font-weight:600;">
-                    Random Forest AI
-                </div>
+                <div style="background:#eef2ff;color:#6366f1;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #c7d2fe;font-family:monospace;font-weight:600;">Random Forest AI</div>
             </div>
-            <div class="lstm-panel-dark">
-                <div style="height:256px;position:relative;">
-                    <canvas id="rfChart"></canvas>
-                </div>
-            </div>
+            <div class="lstm-panel-dark"><div style="height:256px;position:relative;"><canvas id="rfChart"></canvas></div></div>
             <div id="rfPredictions" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
                 <div class="skeleton" style="height:128px;"></div>
                 <div class="skeleton" style="height:128px;"></div>
@@ -459,24 +374,15 @@ $conn->close();
             </div>
         </div>
 
-        <!-- Hotspots -->
         <div class="lstm-panel" style="display:flex;flex-direction:column;gap:20px;">
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
                 <div>
-                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#ef4444;display:flex;align-items:center;gap:8px;" id="hotspotsCardTitle">
-                        <span>🔥</span> Rising Medical Causes (Hotspots)
-                    </h3>
+                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#ef4444;display:flex;align-items:center;gap:8px;" id="hotspotsCardTitle"><span>🔥</span> Rising Medical Causes (Hotspots)</h3>
                     <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">High-velocity growth anomalies identified across specific diagnostics requiring proactive resource staging</p>
                 </div>
-                <div style="background:#fff1f2;color:#f43f5e;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #fecdd3;font-family:monospace;font-weight:600;">
-                    Anomaly Outbreak Alert
-                </div>
+                <div style="background:#fff1f2;color:#f43f5e;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #fecdd3;font-family:monospace;font-weight:600;">Anomaly Outbreak Alert</div>
             </div>
-            <div class="lstm-panel-dark">
-                <div style="height:256px;position:relative;">
-                    <canvas id="hotspotChart"></canvas>
-                </div>
-            </div>
+            <div class="lstm-panel-dark"><div style="height:256px;position:relative;"><canvas id="hotspotChart"></canvas></div></div>
             <div id="hotspotContainers" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
                 <div class="skeleton" style="height:128px;"></div>
                 <div class="skeleton" style="height:128px;"></div>
@@ -490,6 +396,7 @@ $conn->close();
 <script>
 
 const TRAIN_API_URL = "<?php echo $renderTrainApiUrl; ?>";
+const IS_REAL_MODEL = <?php echo $isRealModel ? 'true' : 'false'; ?>;
 
 const GRAINS = {
     weekly:  <?php echo json_encode($data['weekly']  ?? ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]], JSON_UNESCAPED_UNICODE); ?>,
@@ -497,7 +404,6 @@ const GRAINS = {
     yearly:  <?php echo json_encode($data['yearly']  ?? ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]], JSON_UNESCAPED_UNICODE); ?>,
 };
 const RF_DATA = <?php echo json_encode($rfData ?? ['weekly'=>['predictions'=>[],'hotspots'=>[]],'monthly'=>['predictions'=>[],'hotspots'=>[]],'yearly'=>['predictions'=>[],'hotspots'=>[]]], JSON_UNESCAPED_UNICODE); ?>;
-const TREND_FORECAST = <?php echo json_encode($trendForecast, JSON_UNESCAPED_UNICODE) ?: 'null'; ?>;
 
 const GRAIN_META = {
     weekly:  { title: 'Weekly Client Volume — 2022 to Forecast',  forecast: 'Forecast: next 26 weeks (~6 months)', xLimit: 15, rfTitle: 'Top Medical Assistance Prediction (Weekly Distribution)',  hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
@@ -530,6 +436,19 @@ function renderMetrics(grain) {
             <span style="font-size:12px;color:#8392ab;">${c.sub}</span>
         </div>
     `).join('');
+}
+
+function formatShapContributions(item) {
+    const raw = item.shap_contributions || {};
+    const labelMap = {
+        amount: 'Assistance Amount', day_of_week: 'Day of Week', month: 'Month',
+        quarter: 'Quarter', week_of_year: 'Week of Year', is_weekend: 'Weekend Effect',
+        assistance_type_enc: 'Assistance Type',
+    };
+    return Object.entries(raw)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([key, val]) => ({ name: labelMap[key] || key, impact: val }));
 }
 
 function renderRandomForestPredictions(grain) {
@@ -569,32 +488,12 @@ function renderRandomForestPredictions(grain) {
     renderRFChart(targetData);
 }
 
-function formatShapContributions(item) {
-    const raw = item.shap_contributions || {};
-    const labelMap = {
-        amount: 'Assistance Amount',
-        day_of_week: 'Day of Week',
-        month: 'Month',
-        quarter: 'Quarter',
-        week_of_year: 'Week of Year',
-        is_weekend: 'Weekend Effect',
-        assistance_type_enc: 'Assistance Type',
-    };
-    return Object.entries(raw)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([key, val]) => ({ name: labelMap[key] || key, impact: val }));
-}
-
 function renderRFChart(predictions) {
     const ctx = document.getElementById('rfChart').getContext('2d');
     if (rfChartInstance) { rfChartInstance.destroy(); }
     rfChartInstance = new Chart(ctx, {
         type: 'bar',
-        data: {
-            labels: predictions.map(item => item.assistance_type),
-            datasets: [{ label: 'Projected Case Distribution', data: predictions.map(item => item.predicted_count), backgroundColor: 'rgba(99,102,241,0.65)', borderColor: '#6366f1', borderWidth: 1.5, borderRadius: 6, hoverBackgroundColor: 'rgba(99,102,241,0.85)' }]
-        },
+        data: { labels: predictions.map(item => item.assistance_type), datasets: [{ label: 'Projected Case Distribution', data: predictions.map(item => item.predicted_count), backgroundColor: 'rgba(99,102,241,0.65)', borderColor: '#6366f1', borderWidth: 1.5, borderRadius: 6, hoverBackgroundColor: 'rgba(99,102,241,0.85)' }] },
         options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { backgroundColor: '#fff', titleColor: '#344767', bodyColor: '#64748b', borderColor: '#e2e8f0', borderWidth: 1 } }, scales: { x: { grid: { color: 'rgba(226,232,240,0.6)' }, ticks: { color: '#8392ab', font: { size: 10 } } }, y: { grid: { display: false }, ticks: { color: '#344767', font: { size: 11, weight: '600' } } } } }
     });
 }
@@ -697,6 +596,14 @@ function renderChart(grain) {
     });
 }
 
+function safeRender(name, fn) {
+    try { fn(); }
+    catch (err) {
+        console.error(`[${name}] failed:`, err);
+        console.error('GRAINS:', GRAINS, 'RF_DATA:', RF_DATA);
+    }
+}
+
 function switchTab(grain) {
     currentTab = grain;
     ['weekly','monthly','yearly'].forEach(g => {
@@ -707,16 +614,13 @@ function switchTab(grain) {
             btn.style.cssText = 'padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;color:#64748b;transition:all .2s;background:transparent;border:none;font-family:Inter,sans-serif;cursor:pointer;';
         }
     });
-    renderMetrics(grain);
-    renderChart(grain);
-    renderRandomForestPredictions(grain);
-    renderMedicalHotspots(grain);
+    safeRender('renderMetrics', () => renderMetrics(grain));
+    safeRender('renderChart', () => renderChart(grain));
+    safeRender('renderRandomForestPredictions', () => renderRandomForestPredictions(grain));
+    safeRender('renderMedicalHotspots', () => renderMedicalHotspots(grain));
 }
 
-function setPhase(id, state) {
-    const el = document.getElementById('phase-' + id);
-    el.className = 'phase-badge ' + state;
-}
+function setPhase(id, state) { document.getElementById('phase-' + id).className = 'phase-badge ' + state; }
 
 function appendLog(text, cls) {
     const log = document.getElementById('epochLog');
@@ -780,7 +684,15 @@ async function runPrediction() {
     window.location.reload();
 }
 
-window.addEventListener('DOMContentLoaded', () => { switchTab('weekly'); });
+window.addEventListener('DOMContentLoaded', () => {
+    if (!IS_REAL_MODEL) {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'background:#fef3c7;border:1px solid #fbbf24;color:#92400e;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;font-weight:600;';
+        banner.textContent = '⚠ Showing estimated trends — no trained model yet. Click "Predict Forecast" to run real LSTM/Random Forest training.';
+        document.querySelector('.header-area').after(banner);
+    }
+    switchTab('weekly');
+});
 </script>
 </body>
 </html>
