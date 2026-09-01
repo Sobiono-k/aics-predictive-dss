@@ -362,17 +362,17 @@ function pgUrl($p) {
                             <td style="font-weight:600; color:#1e293b;">
                                 <?php echo htmlspecialchars(ucwords(strtolower($fullname))); ?>
                                 <?php if ($is_dup): ?>
-                                    <span style="margin-left:6px;padding:2px 7px;background:#fef2f2;border:1px solid #fca5a5;
-                                                color:#b91c1c;font-size:10px;font-weight:800;border-radius:10px;
-                                                text-transform:uppercase;letter-spacing:.5px;">
-                                        <i class="fas fa-exclamation-circle"></i> Duplicate
-                                    </span>
-                                <?php endif; ?>
-                            </td>
-                            <td style="font-weight:600; color:#1e293b;"><?php echo htmlspecialchars(ucwords(strtolower($fullname))); ?></td>
-                            
-                            <td><?php echo $bdate; ?></td>
-                            <td><?php echo htmlspecialchars($row['barangay'] ?? '—'); ?></td>
+                            <span style="margin-left:6px;padding:2px 7px;background:#fef2f2;border:1px solid #fca5a5;
+                                color:#b91c1c;font-size:10px;font-weight:800;border-radius:10px;
+                                    text-transform:uppercase;letter-spacing:.5px;">
+                                <i class="fas fa-exclamation-circle"></i> Duplicate
+                            </span>
+                            <?php endif; ?>
+                        </td>
+
+                        <td style="font-weight:600; color:#1e293b;"><?php echo $bdate; ?></td>
+
+                        <td><?php echo htmlspecialchars($row['barangay'] ?? '—'); ?></td>
                             <td><span class="badge"><?php echo htmlspecialchars($row['medical_cause']); ?></span></td>
                             <td style="font-size:12px; color:#64748b;"><?php echo $submitted; ?></td>
                             <td style="text-align:center;">
