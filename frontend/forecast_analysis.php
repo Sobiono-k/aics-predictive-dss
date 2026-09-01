@@ -28,12 +28,18 @@ if ($isWindows) {
         'USERPROFILE' => 'C:\\Windows\\Temp',
         'HOME'        => 'C:\\Windows\\Temp',
     ];
-} else {
-    // Production / Linux (Render, Ubuntu, etc.) fallback paths
-    $pythonPath = 'python3';
+} 
+if (!$isWindows) {
+    echo "<pre>DEBUG: which python3 = " . shell_exec('which python3') . "</pre>";
+    echo "<pre>DEBUG: venv exists? " . (file_exists(dirname(__DIR__).'/myenv/bin/python3') ? 'yes' : 'no') . "</pre>";
+}else {
+    
+    // Production / Linux (Render, Ubuntu, etc.)
+    $venvPython = dirname(__DIR__) . '/myenv/bin/python3'; // your actual venv folder name
+    $pythonPath = file_exists($venvPython) ? $venvPython : 'python3';
     $env = [
-        'PATH'        => '/opt/render/project/src/.venv/bin:/usr/local/bin:/usr/bin:/bin',
-        'HOME'        => sys_get_temp_dir(),
+        'PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
+        'HOME' => sys_get_temp_dir(),
     ];
 }
 
@@ -52,9 +58,13 @@ $rfProcess = proc_open(
     [$pythonPath, $rfScriptPath],
     $descriptorspec,
     $rfPipes,
-    dirname($rfScriptPath), // Set working directory to backend so relative imports work
+    dirname($rfScriptPath),
     $env
 );
+
+if (!is_resource($rfProcess)) {
+    die("⚠ Failed to launch Random Forest process. pythonPath: " . htmlspecialchars($pythonPath) . " | OS: " . PHP_OS);
+}
 
 $rfJsonData  = '';
 $rfErrorData = '';
@@ -103,9 +113,13 @@ $process = proc_open(
     [$pythonPath, $scriptPath],
     $descriptorspec,
     $pipes,
-    dirname($scriptPath), // Set working directory to backend here as well
+    dirname($scriptPath),
     $env
 );
+
+if (!is_resource($process)) {
+    die("⚠ Failed to launch LSTM process. pythonPath: " . htmlspecialchars($pythonPath) . " | OS: " . PHP_OS);
+}
 
 $jsonData  = '';
 $errorData = '';
