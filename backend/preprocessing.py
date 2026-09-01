@@ -1,45 +1,26 @@
 import pandas as pd
-from sqlalchemy import create_engine
 import os
 import traceback
 
 # =========================================================
-# DATABASE CONFIGURATION
-# =========================================================
-
-DB_HOST = os.environ.get('DB_HOST', 'localhost')
-DB_USER = os.environ.get('DB_USER', 'root')
-DB_PASS = os.environ.get('DB_PASS', '')
-DB_NAME = os.environ.get('DB_NAME', 'aics_dss')
-DB_PORT = os.environ.get('DB_PORT', '3306')
-
-DB_CONNECTION = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-
-def get_engine():
-    """Create the SQLAlchemy engine, enabling SSL only when connecting to a remote host."""
-    connect_args = {}
-    if DB_HOST != 'localhost':
-        # PyMySQL enables SSL simply by passing a non-empty ssl dict;
-        # an empty dict is enough to trigger "use SSL" without needing a cert file.
-        connect_args = {"ssl": {"ssl": True}}
-    return create_engine(DB_CONNECTION, connect_args=connect_args)
-
-# =========================================================
-# LOAD DATA FROM MYSQL
+# LOAD DATA FROM LOCAL CSV
 # =========================================================
 
 def load_csv_data():
     try:
-        engine = get_engine()   # ← changed from create_engine(DB_CONNECTION)
+        # Resolve path relative to this script's location
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        csv_path = os.path.join(script_dir, 'aics_sample_data.csv')
 
-        query = """
-            SELECT *
-            FROM aics_sample_data
-            ORDER BY id ASC
-        """
+        if not os.path.exists(csv_path):
+            print(f"CSV file not found at: {csv_path}")
+            return pd.DataFrame()
 
-        df = pd.read_sql(query, engine)
+        # Load CSV with fallback encoding for special characters
+        try:
+            df = pd.read_csv(csv_path, encoding='utf-8')
+        except UnicodeDecodeError:
+            df = pd.read_csv(csv_path, encoding='latin1')
 
         # -------------------------------------------------
         # EMPTY DATASET CHECK
@@ -108,8 +89,7 @@ def load_csv_data():
         return df
 
     except Exception as e:
-        import traceback
-        print(f"MySQL Connection Error: {e}")
+        print(f"CSV Loading Error: {e}")
         print(traceback.format_exc())
         raise RuntimeError(f"load_csv_data failed: {e}")
 
@@ -271,4 +251,3 @@ if __name__ == "__main__":
 
     else:
         print("Data loading failed.")
-
