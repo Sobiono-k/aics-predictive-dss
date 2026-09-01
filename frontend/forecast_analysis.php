@@ -16,9 +16,26 @@ require_once(__DIR__ . '/../db.php');
 include 'sidebar.php';
 
 // ─────────────────────────────────────────────────────────────────
-// SHARED CONFIGURATION
+// SHARED CONFIGURATION (Cross-Platform Auto-Detection)
 // ─────────────────────────────────────────────────────────────────
-$pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
+$isWindows = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN');
+
+if ($isWindows) {
+    $pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
+    $env = [
+        'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
+        'SystemRoot'  => 'C:\\Windows',
+        'USERPROFILE' => 'C:\\Windows\\Temp',
+        'HOME'        => 'C:\\Windows\\Temp',
+    ];
+} else {
+    // Production / Linux (Render, Ubuntu, etc.) fallback paths
+    $pythonPath = 'python3';
+    $env = [
+        'PATH'        => '/opt/render/project/src/.venv/bin:/usr/local/bin:/usr/bin:/bin',
+        'HOME'        => sys_get_temp_dir(),
+    ];
+}
 
 $descriptorspec = [
     0 => ["pipe", "r"],
@@ -26,24 +43,16 @@ $descriptorspec = [
     2 => ["pipe", "w"],
 ];
 
-$env = [
-    'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
-    'SystemRoot'  => 'C:\\Windows',
-    'USERPROFILE' => 'C:\\Windows\\Temp',
-    'HOME'        => 'C:\\Windows\\Temp',
-];
-
 // ─────────────────────────────────────────────────────────────────
 // RUN RANDOM FOREST MODEL
 // ─────────────────────────────────────────────────────────────────
 $rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
 
-// Pass arguments as an array to prevent shell invocation errors on Windows
 $rfProcess = proc_open(
     [$pythonPath, $rfScriptPath],
     $descriptorspec,
     $rfPipes,
-    __DIR__,
+    dirname($rfScriptPath), // Set working directory to backend so relative imports work
     $env
 );
 
@@ -90,15 +99,15 @@ if (!$rfData) {
 // ─────────────────────────────────────────────────────────────────
 $scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
 
-// Pass arguments as an array here as well
 $process = proc_open(
     [$pythonPath, $scriptPath],
     $descriptorspec,
     $pipes,
-    __DIR__,
+    dirname($scriptPath), // Set working directory to backend here as well
     $env
 );
 
+$jsonData  = '';
 $errorData = '';
 
 if (is_resource($process)) {
