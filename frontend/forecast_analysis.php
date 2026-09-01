@@ -28,15 +28,39 @@ if ($isWindows) {
         'USERPROFILE' => 'C:\\Windows\\Temp',
         'HOME'        => 'C:\\Windows\\Temp',
     ];
-} 
-if (!$isWindows) {
-    echo "<pre>DEBUG: which python3 = " . shell_exec('which python3') . "</pre>";
-    echo "<pre>DEBUG: venv exists? " . (file_exists(dirname(__DIR__).'/myenv/bin/python3') ? 'yes' : 'no') . "</pre>";
-}else {
-    
-    // Production / Linux (Render, Ubuntu, etc.)
-    $venvPython = dirname(__DIR__) . '/myenv/bin/python3'; // your actual venv folder name
-    $pythonPath = file_exists($venvPython) ? $venvPython : 'python3';
+} else {
+    // Production / Linux (Render, Docker, Ubuntu, etc.)
+    // Try several common install locations in order, since "which python3"
+    // relies on PATH being set the same way inside PHP-FPM/Apache as in a shell.
+    $candidatePaths = [
+        dirname(__DIR__) . '/myenv/bin/python3',   // project venv
+        '/usr/bin/python3',
+        '/usr/local/bin/python3',
+        '/usr/bin/python3.11',
+        '/usr/bin/python3.10',
+        trim((string) shell_exec('command -v python3 2>/dev/null')),
+    ];
+
+    $pythonPath = null;
+    foreach ($candidatePaths as $candidate) {
+        if (!empty($candidate) && (is_file($candidate) || is_executable($candidate))) {
+            $pythonPath = $candidate;
+            break;
+        }
+    }
+
+    // Hard stop with a clear, actionable message instead of silently
+    // continuing with undefined variables.
+    if ($pythonPath === null) {
+        die(
+            "⚠ Python 3 was not found on this server.<br>" .
+            "Checked: " . htmlspecialchars(implode(', ', array_filter($candidatePaths))) . "<br>" .
+            "This container/host likely does not have Python installed. " .
+            "Install it (e.g. <code>apt-get install python3 python3-pip</code> in your Dockerfile) " .
+            "or update the paths above to match where Python actually lives on this server."
+        );
+    }
+
     $env = [
         'PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
         'HOME' => sys_get_temp_dir(),
@@ -69,12 +93,14 @@ if (!is_resource($rfProcess)) {
 $rfJsonData  = '';
 $rfErrorData = '';
 
-if (is_resource($rfProcess)) {
-    $rfJsonData  = stream_get_contents($rfPipes[1]);
-    $rfErrorData = stream_get_contents($rfPipes[2]);
+$rfJsonData  = stream_get_contents($rfPipes[1]);
+$rfErrorData = stream_get_contents($rfPipes[2]);
 
-    fclose($rfPipes[0]); fclose($rfPipes[1]); fclose($rfPipes[2]);
-    proc_close($rfProcess);
+fclose($rfPipes[0]); fclose($rfPipes[1]); fclose($rfPipes[2]);
+$rfExitCode = proc_close($rfProcess);
+
+if ($rfExitCode !== 0 && empty($rfJsonData)) {
+    die("⚠ RF script exited with code $rfExitCode and produced no output.<br>stderr: <pre>" . htmlspecialchars($rfErrorData) . "</pre>");
 }
 
 if (!empty($rfErrorData)) { echo "<pre>RF Script Error: $rfErrorData</pre>"; die(); }
@@ -124,12 +150,10 @@ if (!is_resource($process)) {
 $jsonData  = '';
 $errorData = '';
 
-if (is_resource($process)) {
-    $jsonData  = stream_get_contents($pipes[1]);
-    $errorData = stream_get_contents($pipes[2]);
-    fclose($pipes[0]); fclose($pipes[1]); fclose($pipes[2]);
-    proc_close($process);
-}
+$jsonData  = stream_get_contents($pipes[1]);
+$errorData = stream_get_contents($pipes[2]);
+fclose($pipes[0]); fclose($pipes[1]); fclose($pipes[2]);
+$exitCode = proc_close($process);
 
 $start = strpos($jsonData, '{');
 if ($start !== false && $start > 0) {
