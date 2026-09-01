@@ -14,7 +14,9 @@ RUN a2enmod rewrite
 # Copy entire project directory structure
 COPY . /var/www/html/
 
-# Install Python requirements for your forecasting models
+# Create a virtual environment and install Python requirements inside it
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install --no-cache-dir -r /var/www/html/backend/requirements.txt
 
 # Copy images folder directly into the frontend directory so Apache can serve them
