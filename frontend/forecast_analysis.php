@@ -11,79 +11,69 @@ if (!isset($_SESSION['role'])) {
 require_once(__DIR__ . '/../db.php');
 include 'sidebar.php';
 
-// Database URLs (Render backend - kept for training modal functionality)
-$renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast"; 
+// Render backend URLs
+$renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast";
 $renderTrainApiUrl  = "https://aics-predictive-dss.onrender.com/api/train";
 
 // ─────────────────────────────────────────────────────────────────
-// FETCH FORECAST DATA FROM MySQL DATABASE
+// FETCH REAL FORECAST FROM THE ML API (cached result of /api/train)
 // ─────────────────────────────────────────────────────────────────
-$rfData   = null;
-$data     = null;
+function fetchForecastFromApi($url, $timeout = 8) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err      = curl_error($ch);
+    curl_close($ch);
 
-$query = "SELECT 
-    assistance_type, 
-    medical_cause, 
-    request_date, 
-    status,
-    DATE_FORMAT(request_date, '%Y') as year,
-    DATE_FORMAT(request_date, '%Y-%m') as month,
-    DATE_FORMAT(request_date, '%Y-%m-%d') as day
-FROM aics_sample_data 
-ORDER BY request_date ASC";
+    if ($err || $httpCode !== 200 || !$response) {
+        error_log("Forecast API failed (HTTP $httpCode): $err");
+        return null; // covers unreachable API AND the 404 "no cache yet" case
+    }
 
-$res = $conn->query($query);
-$allRows = [];
-while ($row = $res->fetch_assoc()) {
-    $allRows[] = $row;
+    $decoded = json_decode($response, true);
+    return (json_last_error() === JSON_ERROR_NONE) ? $decoded : null;
 }
 
-// Build data structures per grain
+// Fallback: builds the old local approximation from raw MySQL rows.
+// Only used if the real API is unreachable or hasn't been trained yet.
 function buildGrainData($rows, $grain) {
     $actual = [];
-    $predicted = [];
     $forecast = [];
     $forecastUpper = [];
     $forecastLower = [];
     $labels = [];
-    
-    // Group by period based on grain
+
     if ($grain === 'weekly') {
         $groups = [];
         foreach ($rows as $r) {
             $key = $r['day'];
-            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0, 'labels' => []];
+            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0];
             $groups[$key]['actual']++;
-            $groups[$key]['labels'][] = $key;
         }
         ksort($groups);
-        foreach ($groups as $label => $g) {
-            $labels[] = $label;
-            $actual[] = $g['actual'];
-        }
-        // Simple forecast: extend last 26 weeks
-        $lastActual = end($actual) ?? 0;
+        foreach ($groups as $label => $g) { $labels[] = $label; $actual[] = $g['actual']; }
+        $lastActual = end($actual) ?: 0;
         for ($i = 1; $i <= 26; $i++) {
             $forecast[] = $lastActual * (1 - 0.02 * $i);
             $forecastUpper[] = $lastActual * (1 + 0.1 - 0.02 * $i);
             $forecastLower[] = max(0, $lastActual * (1 - 0.15 - 0.02 * $i));
         }
-        // Metrics
         $mae = 0; $me = 0;
     } elseif ($grain === 'monthly') {
         $groups = [];
         foreach ($rows as $r) {
             $key = $r['month'];
-            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0, 'labels' => []];
+            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0];
             $groups[$key]['actual']++;
-            $groups[$key]['labels'][] = $key;
         }
         ksort($groups);
-        foreach ($groups as $label => $g) {
-            $labels[] = $label;
-            $actual[] = $g['actual'];
-        }
-        $lastActual = end($actual) ?? 0;
+        foreach ($groups as $label => $g) { $labels[] = $label; $actual[] = $g['actual']; }
+        $lastActual = end($actual) ?: 0;
         for ($i = 1; $i <= 12; $i++) {
             $forecast[] = $lastActual * (1 - 0.03 * $i);
             $forecastUpper[] = $lastActual * (1 + 0.15 - 0.03 * $i);
@@ -94,64 +84,115 @@ function buildGrainData($rows, $grain) {
         $groups = [];
         foreach ($rows as $r) {
             $key = $r['year'];
-            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0, 'labels' => []];
+            if (!isset($groups[$key])) $groups[$key] = ['actual' => 0];
             $groups[$key]['actual']++;
-            $groups[$key]['labels'][] = $key;
         }
         ksort($groups);
-        foreach ($groups as $label => $g) {
-            $labels[] = $label;
-            $actual[] = $g['actual'];
-        }
-        // Last year forecast
-        $lastYear = end($labels) ?? '2026';
-        $lastActual = end($actual) ?? 0;
-        $nextYear = (int)$lastYear + 1;
+        foreach ($groups as $label => $g) { $labels[] = $label; $actual[] = $g['actual']; }
+        $lastYear = end($labels) ?: '2026';
+        $lastActual = end($actual) ?: 0;
         $forecast[] = $lastActual * 0.9;
         $forecastUpper[] = $lastActual * 1.1;
         $forecastLower[] = max(0, $lastActual * 0.7);
-        $labels[] = $nextYear;
-        $actual[] = 0;
         $mae = 0; $me = 0;
     }
-    
+
+    // Align forecast onto the SAME label/index axis as actual, null-padded,
+    // so Chart.js plots it in the future instead of overlapping history.
+    $nHist = count($labels);
+    $paddedActual   = array_merge($actual, array_fill(0, count($forecast), null));
+    $paddedPredicted = array_map(fn($v) => $v === null ? null : $v * 0.95, $paddedActual);
+    $paddedForecast = array_merge(array_fill(0, $nHist, null), $forecast);
+    $paddedUpper    = array_merge(array_fill(0, $nHist, null), $forecastUpper);
+    $paddedLower    = array_merge(array_fill(0, $nHist, null), $forecastLower);
+
+    // Extend labels array so the x-axis actually has slots for the forecast points
+    for ($i = 1; $i <= count($forecast); $i++) {
+        $labels[] = ($grain === 'yearly') ? ((int)end($labels) + 1) : "forecast+$i";
+    }
+
     return [
-        'actual' => $actual,
-        'predicted' => array_map(fn($v) => $v * 0.95, $actual),
-        'forecast' => $forecast,
-        'forecast_upper' => $forecastUpper,
-        'forecast_lower' => $forecastLower,
-        'labels' => $labels,
-        'metrics' => ['mae' => round($mae, 2), 'margin_of_error_95' => round($me * 1.96, 2)],
+        'actual'         => $paddedActual,
+        'predicted'      => $paddedPredicted,
+        'forecast'       => $paddedForecast,
+        'forecast_upper' => $paddedUpper,
+        'forecast_lower' => $paddedLower,
+        'labels'         => $labels,
+        'metrics'        => ['mae' => round($mae, 2), 'margin_of_error_95' => round($me * 1.96, 2)],
     ];
 }
 
-if (!empty($allRows)) {
-    $data['weekly']   = buildGrainData($allRows, 'weekly');
-    $data['monthly']  = buildGrainData($allRows, 'monthly');
-    $data['yearly']   = buildGrainData($allRows, 'yearly');
-}
+$apiResult = fetchForecastFromApi($renderPythonApiUrl);
+$data = null;
+$rfData = null;
+$trendForecast = null;
 
-// Build RF data from database
-$rfData = [];
-if (!empty($allRows)) {
-    $assistanceTypes = array_column($allRows, 'assistance_type');
-    $typeCounts = array_count_values($assistanceTypes);
-    arsort($typeCounts);
-    foreach (array_slice($typeCounts, 0, 5) as $type => $count) {
-        $rfData[] = [
-            'assistance_type' => $type,
-            'predicted_count' => $count,
-            'confidence' => 0.85
+if ($apiResult && isset($apiResult['lstm'], $apiResult['random_forest'])) {
+    // ── REAL model output — already label-aligned + null-padded by lstm_model.py ──
+    $data = $apiResult['lstm'];
+
+    $rfData = [];
+    foreach (['weekly', 'monthly', 'yearly'] as $grain) {
+        $predictions = $apiResult['random_forest'][$grain]['predictions'] ?? [];
+        foreach ($predictions as &$p) {
+            $p['assistance_type'] = preg_replace('/^Medical:\s*/', '', $p['assistance_type'] ?? '');
+        }
+        unset($p);
+        $rfData[$grain] = [
+            'predictions' => $predictions,
+            'hotspots'    => $apiResult['random_forest'][$grain]['hotspots'] ?? [],
         ];
     }
-}
-if (empty($rfData)) {
-    $rfData = [
-        "weekly"  => ["predictions" => [], "hotspots" => []],
-        "monthly" => ["predictions" => [], "hotspots" => []],
-        "yearly"  => ["predictions" => [], "hotspots" => []]
-    ];
+    $trendForecast = $apiResult['trend_forecast'] ?? null;
+
+} else {
+    // ── Fallback: real API unreachable or not trained yet ──
+    $query = "SELECT
+        assistance_type,
+        medical_cause,
+        request_date,
+        status,
+        DATE_FORMAT(request_date, '%Y') as year,
+        DATE_FORMAT(request_date, '%Y-%m') as month,
+        DATE_FORMAT(request_date, '%Y-%m-%d') as day
+    FROM aics_sample_data
+    ORDER BY request_date ASC";
+
+    $res = $conn->query($query);
+    $allRows = [];
+    while ($row = $res->fetch_assoc()) {
+        $allRows[] = $row;
+    }
+
+    if (!empty($allRows)) {
+        $data['weekly']  = buildGrainData($allRows, 'weekly');
+        $data['monthly'] = buildGrainData($allRows, 'monthly');
+        $data['yearly']  = buildGrainData($allRows, 'yearly');
+
+        $assistanceTypes = array_column($allRows, 'assistance_type');
+        $typeCounts = array_count_values($assistanceTypes);
+        arsort($typeCounts);
+        $fallbackPredictions = [];
+        foreach (array_slice($typeCounts, 0, 5) as $type => $count) {
+            $fallbackPredictions[] = [
+                'assistance_type' => $type,
+                'predicted_count' => $count,
+                'confidence' => 0.85,
+                'shap_contributions' => [],
+            ];
+        }
+        $rfData = [
+            'weekly'  => ['predictions' => $fallbackPredictions, 'hotspots' => []],
+            'monthly' => ['predictions' => $fallbackPredictions, 'hotspots' => []],
+            'yearly'  => ['predictions' => $fallbackPredictions, 'hotspots' => []],
+        ];
+    } else {
+        $rfData = [
+            'weekly'  => ['predictions' => [], 'hotspots' => []],
+            'monthly' => ['predictions' => [], 'hotspots' => []],
+            'yearly'  => ['predictions' => [], 'hotspots' => []],
+        ];
+    }
 }
 
 $conn->close();
@@ -455,7 +496,8 @@ const GRAINS = {
     monthly: <?php echo json_encode($data['monthly'] ?? ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]], JSON_UNESCAPED_UNICODE); ?>,
     yearly:  <?php echo json_encode($data['yearly']  ?? ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]], JSON_UNESCAPED_UNICODE); ?>,
 };
-const RF_DATA = <?php echo json_encode($rfData ?? [["predictions"=>[],"hotspots"=>[]]], JSON_UNESCAPED_UNICODE); ?>;
+const RF_DATA = <?php echo json_encode($rfData ?? ['weekly'=>['predictions'=>[],'hotspots'=>[]],'monthly'=>['predictions'=>[],'hotspots'=>[]],'yearly'=>['predictions'=>[],'hotspots'=>[]]], JSON_UNESCAPED_UNICODE); ?>;
+const TREND_FORECAST = <?php echo json_encode($trendForecast, JSON_UNESCAPED_UNICODE) ?: 'null'; ?>;
 
 const GRAIN_META = {
     weekly:  { title: 'Weekly Client Volume — 2022 to Forecast',  forecast: 'Forecast: next 26 weeks (~6 months)', xLimit: 15, rfTitle: 'Top Medical Assistance Prediction (Weekly Distribution)',  hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
@@ -467,8 +509,6 @@ let chartInstance = null;
 let rfChartInstance = null;
 let hotspotChartInstance = null;
 let currentTab = 'weekly';
-
-// ── existing render functions (unchanged) ──────────────────────
 
 function renderMetrics(grain) {
     const m = GRAINS[grain].metrics;
@@ -503,7 +543,7 @@ function renderRandomForestPredictions(grain) {
     }
     container.innerHTML = targetData.map((item, index) => {
         const probability = item.confidence || 0;
-        const shapValues = generateSHAPLikeExplanations(item);
+        const shapValues = formatShapContributions(item);
         return `
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;transition:border-color .2s;" onmouseover="this.style.borderColor='#a5b4fc'" onmouseout="this.style.borderColor='#e2e8f0'">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -511,6 +551,7 @@ function renderRandomForestPredictions(grain) {
                     <div style="font-size:12px;padding:4px 10px;border-radius:8px;background:#f0fdf4;color:#059669;border:1px solid #a7f3d0;">${(probability * 100).toFixed(1)}% confidence</div>
                 </div>
                 <h4 style="margin:0 0 10px;font-size:15px;font-weight:700;color:#344767;">${item.assistance_type}</h4>
+                ${item.status ? `<div style="font-size:11px;padding:4px 10px;border-radius:8px;display:inline-block;margin-bottom:8px;background:${item.status==='Rising'?'#fff1f2':item.status==='Declining'?'#eff6ff':'#f8fafc'};color:${item.status==='Rising'?'#f43f5e':item.status==='Declining'?'#3b82f6':'#64748b'};">${item.status} ${item.growth_rate >= 0 ? '+' : ''}${item.growth_rate ?? 0}%</div>` : ''}
                 <div style="margin-top:12px;">
                     <div style="font-size:11px;color:#8392ab;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">SHAP-style Feature Contributions</div>
                     ${shapValues.map(f => `
@@ -528,15 +569,21 @@ function renderRandomForestPredictions(grain) {
     renderRFChart(targetData);
 }
 
-function generateSHAPLikeExplanations(item) {
-    const base = item.predicted_count || 0;
-    return [
-        { name: "Historical Trend",      impact: base * 0.35 },
-        { name: "Seasonality Pattern",   impact: base * 0.25 },
-        { name: "Case Growth Rate",      impact: base * 0.20 },
-        { name: "Regional Demand Spike", impact: base * 0.15 },
-        { name: "Model Tuning Adj.",     impact: base * 0.05 }
-    ];
+function formatShapContributions(item) {
+    const raw = item.shap_contributions || {};
+    const labelMap = {
+        amount: 'Assistance Amount',
+        day_of_week: 'Day of Week',
+        month: 'Month',
+        quarter: 'Quarter',
+        week_of_year: 'Week of Year',
+        is_weekend: 'Weekend Effect',
+        assistance_type_enc: 'Assistance Type',
+    };
+    return Object.entries(raw)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([key, val]) => ({ name: labelMap[key] || key, impact: val }));
 }
 
 function renderRFChart(predictions) {
@@ -666,8 +713,6 @@ function switchTab(grain) {
     renderMedicalHotspots(grain);
 }
 
-// ── Training modal logic ───────────────────────────────────────
-
 function setPhase(id, state) {
     const el = document.getElementById('phase-' + id);
     el.className = 'phase-badge ' + state;
@@ -688,8 +733,6 @@ function setProgress(pct, label) {
     document.getElementById('progPhaseLabel').textContent = label;
 }
 
-// //
-
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function runPrediction() {
@@ -699,12 +742,10 @@ async function runPrediction() {
     ['data','lstm','rf','done'].forEach(p => setPhase(p, 'idle'));
     setProgress(0, 'Initializing…');
 
-    // Kick off the REAL training request in the background — don't await yet
     const trainingPromise = fetch(TRAIN_API_URL, { method: 'POST' })
         .then(r => r.json())
         .catch(err => ({ error: err.message }));
 
-    // ── same visual phases as before, purely cosmetic while real training runs ──
     setPhase('data', 'active');
     setProgress(5, 'Preparing data…');
     const dataLogs = [
@@ -719,13 +760,12 @@ async function runPrediction() {
     setProgress(20, 'Training LSTM…');
     appendLog('[LSTM]  Training in progress on server — this can take 1-3 minutes…', 'loss-line');
 
-    // Wait for the REAL training to actually finish
     const result = await trainingPromise;
 
     if (result.error) {
         appendLog('[ERROR] ' + result.error, 'done-line');
         setProgress(100, 'Training failed — check server logs');
-        return; // don't reload on failure
+        return;
     }
 
     setPhase('lstm', 'done');
@@ -737,7 +777,7 @@ async function runPrediction() {
     document.getElementById('spinRing').style.borderTopColor = '#10b981';
 
     await sleep(600);
-    window.location.reload(); // now /api/forecast will read the freshly-saved cache
+    window.location.reload();
 }
 
 window.addEventListener('DOMContentLoaded', () => { switchTab('weekly'); });

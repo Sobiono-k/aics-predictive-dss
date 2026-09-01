@@ -6,10 +6,6 @@ import traceback
 # LOAD DATA FROM LOCAL CSV
 # =========================================================
 
-# =========================================================
-# LOAD DATA FROM LOCAL CSV
-# =========================================================
-
 def load_csv_data():
     try:
         # Resolve path relative to this script's location
