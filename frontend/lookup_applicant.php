@@ -602,7 +602,6 @@ $qr_api   = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&
 
         <p style="font-size:11px; color:#94a3b8; margin-top:14px; margin-bottom:0;">
             <i class="fas fa-info-circle"></i>
-            Make sure the URL uses your server's IP, not localhost, para ma-scan ng phone.
         </p>
     </div>
 </div>
