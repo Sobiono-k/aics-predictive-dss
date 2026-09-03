@@ -330,7 +330,7 @@ $conn->close();
 
         <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px;">
             <div style="display:inline-flex; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px; padding:4px; gap:4px;">
-                <button onclick="switchTab('weekly')" id="tab-weekly" class="tab-btn active-tab" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; transition:all .2s;">Weekly</button>
+                <button onclick="switchTab('weekly')" id="tab-weekly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; transition:all .2s;">Weekly</button>
                 <button onclick="switchTab('monthly')" id="tab-monthly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">Monthly</button>
                 <button onclick="switchTab('yearly')" id="tab-yearly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">Yearly</button>
             </div>
@@ -377,7 +377,7 @@ $conn->close();
         <div class="lstm-panel" style="display:flex;flex-direction:column;gap:20px;">
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
                 <div>
-                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#ef4444;display:flex;align-items:center;gap:8px;" id="hotspotsCardTitle"><span>🔥</span> Rising Medical Causes (Hotspots)</h3>
+                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#ef4444;display:flex;align-items:center;gap:8px;" id="hotspotsCardTitle"><span></span> Rising Medical Causes (Hotspots)</h3>
                     <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">High-velocity growth anomalies identified across specific diagnostics requiring proactive resource staging</p>
                 </div>
                 <div style="background:#fff1f2;color:#f43f5e;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #fecdd3;font-family:monospace;font-weight:600;">Anomaly Outbreak Alert</div>
@@ -406,8 +406,8 @@ const GRAINS = {
 const RF_DATA = <?php echo json_encode($rfData ?? ['weekly'=>['predictions'=>[],'hotspots'=>[]],'monthly'=>['predictions'=>[],'hotspots'=>[]],'yearly'=>['predictions'=>[],'hotspots'=>[]]], JSON_UNESCAPED_UNICODE); ?>;
 
 const GRAIN_META = {
-    weekly:  { title: 'Weekly Client Volume — 2022 to Forecast',  forecast: 'Forecast: next 26 weeks (~6 months)', xLimit: 15, rfTitle: 'Top Medical Assistance Prediction (Weekly Distribution)',  hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
-    monthly: { title: 'Monthly Client Volume — 2022 to Forecast', forecast: 'Forecast: remaining months of 2026',  xLimit: 20, rfTitle: 'Top Medical Assistance Prediction (Monthly Aggregate)',     hotspotTitle: 'Rising Medical Causes & Hotspots (Monthly Velocity Acceleration)' },
+    weekly:  { title: 'Weekly Client Volume — 2022 to Forecast',  forecast: 'Forecast: remaining months of the year', xLimit: 15, rfTitle: 'Top Medical Assistance Prediction (Weekly Distribution)',  hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
+    monthly: { title: 'Monthly Client Volume — 2022 to Forecast', forecast: 'Forecast: 12-month Outlook',  xLimit: 20, rfTitle: 'Top Medical Assistance Prediction (Monthly Aggregate)',     hotspotTitle: 'Rising Medical Causes & Hotspots (Monthly Velocity Acceleration)' },
     yearly:  { title: 'Yearly Client Volume — 2022 to Forecast',  forecast: 'Forecast: 5-year outlook',           xLimit: 10, rfTitle: 'Top Medical Assistance Prediction (Yearly Projections)',   hotspotTitle: 'Rising Medical Causes & Hotspots (Yearly Structural Shifts)' },
 };
 
@@ -423,10 +423,10 @@ function renderMetrics(grain) {
     const peakForecast = forecast.length ? Math.max(...forecast) : 0;
     const avgActual    = actual.length    ? actual.reduce((a,b) => a+b,0) / actual.length : 0;
     const cards = [
-        { label: 'Mean Absolute Error',   value: m.mae.toLocaleString(),                       sub: 'Average prediction error (clients/period)', color: '#344767', icon: '📉' },
-        { label: '95% Confidence Margin', value: '± ' + m.margin_of_error_95.toLocaleString(), sub: 'Forecast uncertainty envelope',             color: '#0d9488', icon: '📊' },
-        { label: 'Peak Forecast Volume',  value: Math.round(peakForecast).toLocaleString(),     sub: 'Highest projected period',                  color: '#7c3aed', icon: '🔝' },
-        { label: 'Avg Historical Volume', value: Math.round(avgActual).toLocaleString(),        sub: 'Per period (2022 – 2026)',                  color: '#2563eb', icon: '📋' },
+        { label: 'Mean Absolute Error',   value: m.mae.toLocaleString(),                       sub: 'Average prediction error (clients/period)', color: '#344767', icon: '' },
+        { label: '95% Confidence Margin', value: '± ' + m.margin_of_error_95.toLocaleString(), sub: 'Forecast uncertainty envelope',             color: '#0d9488', icon: '' },
+        { label: 'Peak Forecast Volume',  value: Math.round(peakForecast).toLocaleString(),     sub: 'Highest projected period',                  color: '#7c3aed', icon: '' },
+        { label: 'Avg Historical Volume', value: Math.round(avgActual).toLocaleString(),        sub: 'Per period (2022 – 2026)',                  color: '#2563eb', icon: '' },
     ];
     document.getElementById('metricCards').innerHTML = cards.map(c => `
         <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--card-shadow);">
@@ -500,7 +500,7 @@ function renderRFChart(predictions) {
 
 function renderMedicalHotspots(grain) {
     const container = document.getElementById('hotspotContainers');
-    document.getElementById('hotspotsCardTitle').innerHTML = '<span>🔥</span> ' + GRAIN_META[grain].hotspotTitle;
+    document.getElementById('hotspotsCardTitle').innerHTML = '<span></span> ' + GRAIN_META[grain].hotspotTitle;
     let hotspotData = (RF_DATA && RF_DATA[grain]) ? RF_DATA[grain].hotspots : [];
     if (!hotspotData || hotspotData.length === 0) {
         const predictions = (RF_DATA && RF_DATA[grain]) ? RF_DATA[grain].predictions : [];
@@ -569,7 +569,7 @@ function renderChart(grain) {
             labels: g.labels,
             datasets: [
                 { label: 'Actual Volume',         data: g.actual,         borderColor: '#60a5fa', backgroundColor: 'transparent', borderWidth: 2,   pointRadius: grain==='yearly'?4:(grain==='monthly'?3:0), pointHoverRadius: 5, tension: 0.3, spanGaps: false },
-                { label: 'Model Fit (In-Sample)', data: g.predicted,      borderColor: '#a78bfa', borderDash: [5,4], backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: false },
+                { label: 'Model Fit', data: g.predicted,      borderColor: '#a78bfa', borderDash: [5,4], backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: false },
                 { label: 'Forecast',              data: g.forecast,       borderColor: '#2dd4bf', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: grain==='yearly'?5:(grain==='monthly'?4:2), pointHoverRadius: 6, pointBackgroundColor: '#2dd4bf', tension: 0.3, spanGaps: false },
                 { label: 'Upper 95% CI',          data: g.forecast_upper, borderColor: 'rgba(45,212,191,0.25)', backgroundColor: 'transparent', borderWidth: 1, borderDash: [3,3], pointRadius: 0, spanGaps: false, fill: false },
                 { label: 'Lower 95% CI',          data: g.forecast_lower, borderColor: 'rgba(45,212,191,0.25)', backgroundColor: 'rgba(45,212,191,0.10)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, spanGaps: false, fill: '-1' },
@@ -687,8 +687,6 @@ async function runPrediction() {
 window.addEventListener('DOMContentLoaded', () => {
     if (!IS_REAL_MODEL) {
         const banner = document.createElement('div');
-        banner.style.cssText = 'background:#fef3c7;border:1px solid #fbbf24;color:#92400e;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;font-weight:600;';
-        banner.textContent = '⚠ Showing estimated trends — no trained model yet. Click "Predict Forecast" to run real LSTM/Random Forest training.';
         document.querySelector('.header-area').after(banner);
     }
     switchTab('weekly');

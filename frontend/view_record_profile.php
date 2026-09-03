@@ -2,8 +2,12 @@
 // view_pending_profile.php
 // Opens in a new window — printable DSWD-styled profile of a pending applicant
 require_once 'auth.php';
-
 require_once(__DIR__ . '/../db.php');
+
+// Helper function for safe HTML escaping in PHP 8.1+
+function h(?string $value): string {
+    return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
+}
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if (!$id) { echo "Invalid request."; exit(); }
@@ -15,13 +19,17 @@ $row = $stmt->get_result()->fetch_assoc();
 
 if (!$row) { echo "<p style='font-family:sans-serif;padding:40px;color:#ef4444;'>Record not found.</p>"; exit(); }
 
-$fullname  = ucwords(strtolower(trim($row['fname'] . ' ' . ($row['mname'] ? $row['mname'] . ' ' : '') . $row['lname'])));
+$fname = $row['fname'] ?? '';
+$mname = $row['mname'] ?? '';
+$lname = $row['lname'] ?? '';
+
+$fullname  = ucwords(strtolower(trim($fname . ' ' . ($mname ? $mname . ' ' : '') . $lname)));
 $bdate     = (!empty($row['birth_date']) && $row['birth_date'] !== '0000-00-00') ? date("F d, Y", strtotime($row['birth_date'])) : 'Not specified';
 $submitted = !empty($row['request_date']) 
     ? date("F d, Y g:i A", strtotime($row['request_date'])) 
     : 'N/A';
 $printed   = date("F d, Y g:i A");
-$status = $row['status'] ?? 'Pending';
+$status    = $row['status'] ?? 'Pending';
 
 // Family composition (stored as JSON if available)
 $family = [];
@@ -35,7 +43,7 @@ if (!empty($row['family_composition'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSWD Profile — <?php echo htmlspecialchars($fullname); ?></title>
+    <title>DSWD Profile — <?php echo h($fullname); ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -319,7 +327,7 @@ if (!empty($row['family_composition'])) {
 </div>
 
 <!-- ══════════════════════════════════════════
-     PRINTABLE DOCUMENT
+    PRINTABLE DOCUMENT
 ══════════════════════════════════════════ -->
 <div class="document">
 
@@ -345,7 +353,7 @@ if (!empty($row['family_composition'])) {
     <div class="code-banner">
         <div>
             <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:4px;">Application Reference Code</div>
-            <div class="code"><?php echo htmlspecialchars($row['application_code']); ?></div>
+            <div class="code"><?php echo h($row['application_code'] ?? ''); ?></div>
         </div>
         <div style="text-align:right;">
             <div style="font-size:10px; color:var(--muted); margin-bottom:4px;">Submission Status</div>
@@ -355,7 +363,7 @@ if (!empty($row['family_composition'])) {
             ?>
 
             <span class="status-pill <?php echo $statusClass === 'approved' ? 'claimed' : ''; ?>">
-                <?php echo htmlspecialchars($status); ?>
+                <?php echo h($status); ?>
             </span>
             <div style="font-size:10px; color:var(--muted); margin-top:6px;">
                 Submitted: <?php echo $submitted; ?>
@@ -375,15 +383,15 @@ if (!empty($row['family_composition'])) {
         <div class="info-grid cols-4" style="margin-bottom:18px;">
             <div class="info-item" style="grid-column: span 2;">
                 <label>Buong Pangalan / Full Name</label>
-                <div class="value highlight"><?php echo htmlspecialchars($fullname); ?></div>
+                <div class="value highlight"><?php echo h($fullname); ?></div>
             </div>
             <div class="info-item">
                 <label>Apelyido / Last Name</label>
-                <div class="value"><?php echo htmlspecialchars(ucwords(strtolower($row['lname']))); ?></div>
+                <div class="value"><?php echo h(ucwords(strtolower($lname))); ?></div>
             </div>
             <div class="info-item">
                 <label>Unang Pangalan / First Name</label>
-                <div class="value"><?php echo htmlspecialchars(ucwords(strtolower($row['fname']))); ?></div>
+                <div class="value"><?php echo h(ucwords(strtolower($fname))); ?></div>
             </div>
         </div>
 
@@ -395,18 +403,18 @@ if (!empty($row['family_composition'])) {
             </div>
             <div class="info-item">
                 <label>Kasarian / Sex</label>
-                <div class="value"><?php echo htmlspecialchars($row['sex'] ?? '—'); ?></div>
+                <div class="value"><?php echo h($row['sex'] ?? '—'); ?></div>
             </div>
             <div class="info-item">
                 <label>Katayuang Sibil / Civil Status</label>
-                <div class="value"><?php echo htmlspecialchars($row['civil_status'] ?? '—'); ?></div>
+                <div class="value"><?php echo h($row['civil_status'] ?? '—'); ?></div>
             </div>
         </div>
 
         <div class="info-grid" style="margin-bottom:18px;">
             <div class="info-item">
                 <label>Barangay</label>
-                <div class="value"><?php echo htmlspecialchars($row['barangay'] ?? '—'); ?></div>
+                <div class="value"><?php echo h($row['barangay'] ?? '—'); ?></div>
             </div>
             <div class="info-item">
                 <label>Lungsod / City</label>
@@ -432,18 +440,18 @@ if (!empty($row['family_composition'])) {
         <div class="info-grid cols-2" style="margin-bottom:18px;">
             <div class="info-item">
                 <label>Uri ng Tulong / Type of Assistance</label>
-                <div class="value green"><?php echo htmlspecialchars($row['assistance_type'] ?? '—'); ?></div>
+                <div class="value green"><?php echo h($row['assistance_type'] ?? '—'); ?></div>
             </div>
             <div class="info-item">
                 <label>Kategorya ng Kliyente / Client Category</label>
-                <div class="value"><?php echo htmlspecialchars($row['client_category'] ?? '—'); ?></div>
+                <div class="value"><?php echo h($row['client_category'] ?? '—'); ?></div>
             </div>
         </div>
 
         <div class="info-grid cols-full" style="margin-bottom:18px;">
             <div class="info-item">
                 <label>Sub-Kategorya / Sub-Category</label>
-                <div class="value"><?php echo htmlspecialchars($row['client_subcategory'] ?? '—'); ?></div>
+                <div class="value"><?php echo h($row['client_subcategory'] ?? '—'); ?></div>
             </div>
         </div>
 
@@ -454,7 +462,7 @@ if (!empty($row['family_composition'])) {
                     <?php
                     $cause = $row['medical_cause'] ?? '—';
                     $decoded = json_decode($cause, true);
-                    echo htmlspecialchars(is_array($decoded) ? implode(', ', $decoded) : $cause);
+                    echo h(is_array($decoded) ? implode(', ', $decoded) : $cause);
                     ?>
                 </div>
             </div>
@@ -484,11 +492,11 @@ if (!empty($row['family_composition'])) {
                 <?php if (!empty($family)): ?>
                     <?php foreach ($family as $member): ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($member['name'] ?? '—'); ?></td>
-                        <td><?php echo htmlspecialchars($member['relation'] ?? '—'); ?></td>
-                        <td><?php echo htmlspecialchars($member['age'] ?? '—'); ?></td>
-                        <td><?php echo htmlspecialchars($member['occupation'] ?? '—'); ?></td>
-                        <td><?php echo !empty($member['salary']) ? '₱ ' . number_format($member['salary'], 2) : '—'; ?></td>
+                        <td><?php echo h($member['name'] ?? '—'); ?></td>
+                        <td><?php echo h($member['relation'] ?? '—'); ?></td>
+                        <td><?php echo h((string)($member['age'] ?? '—')); ?></td>
+                        <td><?php echo h($member['occupation'] ?? '—'); ?></td>
+                        <td><?php echo !empty($member['salary']) ? '₱ ' . number_format((float)$member['salary'], 2) : '—'; ?></td>
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
@@ -550,7 +558,7 @@ if (!empty($row['family_composition'])) {
     <div class="sig-area">
         <div class="sig-box">
             <div class="sig-line"></div>
-            <div style="font-size:12px; font-weight:700; color:var(--text);"><?php echo htmlspecialchars($fullname); ?></div>
+            <div style="font-size:12px; font-weight:700; color:var(--text);"><?php echo h($fullname); ?></div>
             <div class="sig-label">Buong Pangalan at Pirma ng Kliyente<br>(Signature over Printed Name)</div>
         </div>
         <div class="sig-box">

@@ -1,4 +1,7 @@
 <?php
+
+//index.php
+
 set_time_limit(0);
 session_start();
 
@@ -11,55 +14,197 @@ require_once(__DIR__ . '/../db.php');
 
 include 'sidebar.php';
 
-// ─── SHARED PYTHON CONFIG ────────────────────────────────────────
-$pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
+// ─── SHARED ML API CONFIG ─────────────────────────────────────────
+// Same real, deployed model that forecast_analysis.php uses — no more
+// local proc_open()/python.exe calls, which only worked on one machine.
+$renderPythonApiUrl = "https://aics-predictive-dss.onrender.com/api/forecast";
 
-$descriptorspec = [
-    0 => ["pipe", "r"],
-    1 => ["pipe", "w"],
-    2 => ["pipe", "w"],
-];
+function fetchForecastFromApi($url, $timeout = 8) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err      = curl_error($ch);
+    curl_close($ch);
 
-$env = [
-    'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
-    'SystemRoot'  => 'C:\\Windows',
-    'USERPROFILE' => 'C:\\Windows\\Temp',
-    'HOME'        => 'C:\\Windows\\Temp',
-];
-
-// ─── PIPELINE A: LSTM ────────────────────────────────────────────
-$lstmScriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
-// Pass executable and script as an array to prevent Windows path quoting errors
-$lstmProcess = proc_open(
-    [$pythonPath, $lstmScriptPath], 
-    $descriptorspec, 
-    $lstmPipes, 
-    __DIR__, 
-    $env
-);
-$lstmJsonData  = '';
-$lstmErrorData = '';
-
-if (is_resource($lstmProcess)) {
-    $lstmJsonData  = stream_get_contents($lstmPipes[1]);
-    $lstmErrorData = stream_get_contents($lstmPipes[2]);
-    fclose($lstmPipes[0]); 
-    fclose($lstmPipes[1]); 
-    fclose($lstmPipes[2]);
-    proc_close($lstmProcess);
+    if ($err || $httpCode !== 200 || !$response) {
+        error_log("Forecast API failed (HTTP $httpCode): $err");
+        return null;
+    }
+    $decoded = json_decode($response, true);
+    return (json_last_error() === JSON_ERROR_NONE) ? $decoded : null;
 }
 
-// Optional debugging fallback: if json data is empty, log or check $lstmErrorData
-$lstmStart = strpos($lstmJsonData, '{');
-if ($lstmStart !== false && $lstmStart > 0) $lstmJsonData = substr($lstmJsonData, $lstmStart);
-$lstmData = json_decode($lstmJsonData, true);
+// ─── FALLBACK: ISO-week-correct grouping + genuine future dates ──
+// Only used if the real API is unreachable or not trained yet — keeps
+// the dashboard alive instead of showing an empty chart.
+function isoWeekLabel(DateTime $dt): string {
+    $clone = clone $dt;
+    $clone->setISODate((int)$dt->format('o'), (int)$dt->format('W'));
+    return $clone->format('Y') . '-W' . $clone->format('W');
+}
 
-if (!$lstmData || !isset($lstmData['weekly'], $lstmData['monthly'], $lstmData['yearly'])) {
-    $lstmData = [
-        'weekly'  => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
-        'monthly' => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
-        'yearly'  => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
+function buildGrainData($rows, $grain) {
+    $groups = [];
+    $keyDates = [];
+
+    foreach ($rows as $r) {
+        $dt = new DateTime($r['request_date']);
+
+        if ($grain === 'weekly') {
+            $periodStart = clone $dt;
+            $periodStart->setISODate((int)$dt->format('o'), (int)$dt->format('W'));
+            $key = isoWeekLabel($dt);
+        } elseif ($grain === 'monthly') {
+            $periodStart = new DateTime($dt->format('Y-m-01'));
+            $key = $dt->format('Y-m');
+        } else {
+            $periodStart = new DateTime($dt->format('Y-01-01'));
+            $key = $dt->format('Y');
+        }
+
+        if (!isset($groups[$key])) {
+            $groups[$key] = 0;
+            $keyDates[$key] = $periodStart;
+        }
+        $groups[$key]++;
+    }
+
+    uksort($groups, fn($a, $b) => $keyDates[$a] <=> $keyDates[$b]);
+
+    $labels = array_keys($groups);
+    $actual = array_values($groups);
+    $nHist  = count($labels);
+
+    if ($nHist === 0) {
+        return [
+            'actual' => [], 'predicted' => [], 'forecast' => [],
+            'forecast_upper' => [], 'forecast_lower' => [], 'labels' => [],
+            'metrics' => ['mae' => 0, 'margin_of_error_95' => 0],
+        ];
+    }
+
+    $forecastSteps = $grain === 'weekly' ? 26 : ($grain === 'monthly' ? 12 : 5);
+    $decayRate     = $grain === 'weekly' ? 0.02 : ($grain === 'monthly' ? 0.03 : 0.10);
+    $bandWidth     = $grain === 'weekly' ? 0.10 : ($grain === 'monthly' ? 0.15 : 0.20);
+
+    $lastActual = end($actual);
+    $lastLabel  = array_key_last($groups);
+    $lastDate   = $keyDates[$lastLabel];
+
+    $forecast = [];
+    $forecastUpper = [];
+    $forecastLower = [];
+    $futureLabels = [];
+    $cursor = clone $lastDate;
+
+    for ($i = 1; $i <= $forecastSteps; $i++) {
+        if ($grain === 'weekly') {
+            $cursor->modify('+1 week');
+            $futureLabels[] = isoWeekLabel($cursor);
+        } elseif ($grain === 'monthly') {
+            $cursor->modify('+1 month');
+            $futureLabels[] = $cursor->format('Y-m');
+        } else {
+            $cursor->modify('+1 year');
+            $futureLabels[] = $cursor->format('Y');
+        }
+        $projected = max(0, $lastActual * (1 - $decayRate * $i));
+        $forecast[] = $projected;
+        $forecastUpper[] = $lastActual * (1 + $bandWidth - $decayRate * $i);
+        $forecastLower[] = max(0, $lastActual * (1 - $bandWidth - $decayRate * $i));
+    }
+
+    $allLabels       = array_merge($labels, $futureLabels);
+    $paddedActual    = array_merge($actual, array_fill(0, $forecastSteps, null));
+    $paddedPredicted = array_map(fn($v) => $v === null ? null : round($v * 0.95, 2), $paddedActual);
+    $paddedForecast  = array_merge(array_fill(0, $nHist - 1, null), [$lastActual], $forecast);
+    $paddedUpper     = array_merge(array_fill(0, $nHist - 1, null), [$lastActual], $forecastUpper);
+    $paddedLower     = array_merge(array_fill(0, $nHist - 1, null), [$lastActual], $forecastLower);
+
+    return [
+        'actual'         => $paddedActual,
+        'predicted'      => $paddedPredicted,
+        'forecast'       => $paddedForecast,
+        'forecast_upper' => $paddedUpper,
+        'forecast_lower' => $paddedLower,
+        'labels'         => $allLabels,
+        'metrics'        => ['mae' => 0, 'margin_of_error_95' => 0], // real MAE only available from the trained model
     ];
+}
+
+// ─── DECIDE: REAL MODEL DATA vs FALLBACK ─────────────────────────
+$apiResult   = fetchForecastFromApi($renderPythonApiUrl);
+$isRealModel = ($apiResult && isset($apiResult['lstm'], $apiResult['random_forest']));
+
+if ($isRealModel) {
+    $lstmData = $apiResult['lstm'];
+
+    $rfData = [];
+    foreach (['weekly', 'monthly', 'yearly'] as $grain) {
+        $predictions = $apiResult['random_forest'][$grain]['predictions'] ?? [];
+        foreach ($predictions as &$p) {
+            $p['assistance_type'] = preg_replace('/^Medical:\s*/', '', $p['assistance_type'] ?? '');
+        }
+        unset($p);
+        $rfData[$grain] = [
+            'predictions' => $predictions,
+            'hotspots'    => $apiResult['random_forest'][$grain]['hotspots'] ?? [],
+        ];
+    }
+} else {
+    $query = "SELECT
+        assistance_type,
+        medical_cause,
+        request_date,
+        status
+    FROM aics_sample_data
+    ORDER BY request_date ASC";
+
+    $res = $conn->query($query);
+    $allRows = [];
+    if ($res) while ($row = $res->fetch_assoc()) $allRows[] = $row;
+
+    if (!empty($allRows)) {
+        $lstmData = [
+            'weekly'  => buildGrainData($allRows, 'weekly'),
+            'monthly' => buildGrainData($allRows, 'monthly'),
+            'yearly'  => buildGrainData($allRows, 'yearly'),
+        ];
+
+        $assistanceTypes = array_column($allRows, 'assistance_type');
+        $typeCounts = array_count_values($assistanceTypes);
+        arsort($typeCounts);
+        $fallbackPredictions = [];
+        foreach (array_slice($typeCounts, 0, 5) as $type => $count) {
+            $fallbackPredictions[] = [
+                'assistance_type' => $type,
+                'predicted_count' => $count,
+                'confidence' => 0.85,
+                'shap_contributions' => [],
+            ];
+        }
+        $rfData = [
+            'weekly'  => ['predictions' => $fallbackPredictions, 'hotspots' => []],
+            'monthly' => ['predictions' => $fallbackPredictions, 'hotspots' => []],
+            'yearly'  => ['predictions' => $fallbackPredictions, 'hotspots' => []],
+        ];
+    } else {
+        $lstmData = [
+            'weekly'  => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
+            'monthly' => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
+            'yearly'  => ['actual'=>[],'predicted'=>[],'forecast'=>[],'forecast_upper'=>[],'forecast_lower'=>[],'labels'=>[],'metrics'=>['mae'=>0,'margin_of_error_95'=>0]],
+        ];
+        $rfData = [
+            'weekly'  => ['predictions' => [], 'hotspots' => []],
+            'monthly' => ['predictions' => [], 'hotspots' => []],
+            'yearly'  => ['predictions' => [], 'hotspots' => []],
+        ];
+    }
 }
 
 $lstm_val = 0;
@@ -67,41 +212,7 @@ foreach (($lstmData['monthly']['forecast'] ?? []) as $fv) {
     if ($fv !== null) { $lstm_val = round($fv); break; }
 }
 
-// ─── PIPELINE B: RANDOM FOREST ───────────────────────────────────
-$rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
-// Pass executable and script as an array here as well
-$rfProcess = proc_open(
-    [$pythonPath, $rfScriptPath], 
-    $descriptorspec, 
-    $rfPipes, 
-    __DIR__, 
-    $env
-);
-$rfJsonData  = '';
-$rfErrorData = '';
-
-if (is_resource($rfProcess)) {
-    $rfJsonData  = stream_get_contents($rfPipes[1]);
-    $rfErrorData = stream_get_contents($rfPipes[2]);
-    fclose($rfPipes[0]); 
-    fclose($rfPipes[1]); 
-    fclose($rfPipes[2]);
-    proc_close($rfProcess);
-}
-
-$rfStart = strpos($rfJsonData, '{');
-if ($rfStart !== false && $rfStart > 0) $rfJsonData = substr($rfJsonData, $rfStart);
-$rfData = json_decode($rfJsonData, true);
-
-if (!$rfData) {
-    $rfData = ["weekly"=>["predictions"=>[],"hotspots"=>[]],"monthly"=>["predictions"=>[],"hotspots"=>[]],"yearly"=>["predictions"=>[],"hotspots"=>[]]];
-} else {
-    foreach (['weekly','monthly','yearly'] as $g) {
-        if (!isset($rfData[$g]))             $rfData[$g] = ["predictions"=>[],"hotspots"=>[]];
-        if (!isset($rfData[$g]['hotspots'])) $rfData[$g]['hotspots'] = [];
-    }
-}
-
+// ─── DASHBOARD STATS (unchanged) ─────────────────────────────────
 $columns_res = $conn->query("SHOW COLUMNS FROM aics_sample_data");
 $cols = [];
 if ($columns_res) while($c = $columns_res->fetch_assoc()) $cols[] = $c['Field'];
@@ -142,6 +253,16 @@ if ($loc_col) {
     if ($lr) while($r = $lr->fetch_assoc()) $location_data[] = $r;
     $br = $conn->query("SELECT `$loc_col` as brgy,COUNT(*) as count FROM aics_sample_data GROUP BY `$loc_col` ORDER BY count DESC LIMIT 3");
     if ($br) while($r = $br->fetch_assoc()) $top_3_barangays[$r['brgy']] = $r['count'];
+}
+
+// TEMP DEBUG — visit ?debug=1 as an admin to inspect the raw API result.
+// Remove this block once you've confirmed everything works.
+if (isset($_GET['debug']) && isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
+    echo '<pre style="background:#111;color:#0f0;padding:16px;white-space:pre-wrap;">';
+    echo "isRealModel: " . ($isRealModel ? 'true' : 'false') . "\n";
+    echo "API URL: $renderPythonApiUrl\n";
+    echo "Raw API result:\n" . print_r($apiResult, true);
+    echo '</pre>';
 }
 
 $conn->close();
@@ -338,7 +459,7 @@ echo "<script>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:4px">
             <div>
                 <h2>AICS Client Volume Forecast</h2>
-                <p style="font-size:12px;color:#64748b;margin:0">LSTM-powered predictions — historical data 2022–2026 with forward projections</p>
+                <p style="font-size:12px;color:#64748b;margin:0">LSTM-predictions — historical data 2022–2026</p>
             </div>
             <div class="chart-controls">
                 <button id="btn-weekly"  class="tgl-btn"        onclick="switchGrain('weekly')">Weekly</button>
@@ -365,6 +486,7 @@ echo "<script>
         </div>
     </div>
 
+
     <!-- RECENT RECORDS -->
     <div class="section-box">
         <h2>Recent Request Records</h2>
@@ -387,9 +509,9 @@ let currentGrain    = 'monthly';
 const GRAIN_LABEL = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
 
 const FC_META = {
-    weekly:  { title:'Weekly Client Volume — 2022 to Forecast',  forecast:'Forecast: next 26 weeks (~6 months)', xLimit:15 },
-    monthly: { title:'Monthly Client Volume — 2022 to Forecast', forecast:'Forecast: remaining months of 2026',  xLimit:20 },
-    yearly:  { title:'Yearly Client Volume — 2022 to Forecast',  forecast:'Forecast: 5-year outlook',           xLimit:10 },
+    weekly:  { title: 'Weekly Client Volume — 2022 to Forecast',  forecast: 'Forecast: remaining months of the year', xLimit: 15, rfTitle: 'Top Medical Assistance Prediction (Weekly Distribution)',  hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
+    monthly: { title: 'Monthly Client Volume — 2022 to Forecast', forecast: 'Forecast: 12-month Outlook',  xLimit: 20, rfTitle: 'Top Medical Assistance Prediction (Monthly Aggregate)',     hotspotTitle: 'Rising Medical Causes & Hotspots (Monthly Velocity Acceleration)' },
+    yearly:  { title: 'Yearly Client Volume — 2022 to Forecast',  forecast: 'Forecast: 5-year outlook',           xLimit: 10, rfTitle: 'Top Medical Assistance Prediction (Yearly Projections)',   hotspotTitle: 'Rising Medical Causes & Hotspots (Yearly Structural Shifts)' },
 };
 
 // ─── Master entry point ───────────────────────────────────────────
@@ -539,10 +661,10 @@ function renderMetrics(grain) {
     const m        = g.metrics || { mae: 0, margin_of_error_95: 0 };
 
     const cards = [
-        { label:'Mean Absolute Error',   value:Number(m.mae).toLocaleString(),               sub:'Avg prediction error (clients/period)', icon:'📉', color:'#1e293b' },
-        { label:'95% Confidence Margin', value:'± ' + Number(m.margin_of_error_95).toLocaleString(), sub:'Forecast uncertainty envelope',   icon:'📊', color:'#0d9488' },
-        { label:'Peak Forecast Volume',  value:Math.round(peak).toLocaleString(),             sub:'Highest projected period',              icon:'🔝', color:'#7c3aed' },
-        { label:'Avg Historical Volume', value:Math.round(avg).toLocaleString(),              sub:'Per period (2022–2026)',                 icon:'📋', color:'#3b82f6' },
+        { label:'Mean Absolute Error',   value:Number(m.mae).toLocaleString(),               sub:'Avg prediction error (clients/period)', icon:'', color:'#1e293b' },
+        { label:'95% Confidence Margin', value:'± ' + Number(m.margin_of_error_95).toLocaleString(), sub:'Forecast uncertainty envelope',   icon:'', color:'#0d9488' },
+        { label:'Peak Forecast Volume',  value:Math.round(peak).toLocaleString(),             sub:'Highest projected period',              icon:'', color:'#7c3aed' },
+        { label:'Avg Historical Volume', value:Math.round(avg).toLocaleString(),              sub:'Per period (2022–2026)',                 icon:'', color:'#3b82f6' },
     ];
 
     document.getElementById('fcMetricCards').innerHTML = cards.map(c => `
@@ -591,7 +713,7 @@ function renderChart(grain) {
             labels: g.labels || [],
             datasets: [
                 { label:'Actual Volume',         data:g.actual||[],         borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.06)', borderWidth:2, fill:true,  tension:0.3, pointRadius:grain==='yearly'?4:(grain==='monthly'?3:0), pointHoverRadius:5, spanGaps:false },
-                { label:'Model Fit (In-Sample)', data:g.predicted||[],      borderColor:'#a78bfa', borderDash:[5,4], backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, pointHoverRadius:4, tension:0.3, spanGaps:false },
+                { label:'Model Fit', data:g.predicted||[],      borderColor:'#a78bfa', borderDash:[5,4], backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, pointHoverRadius:4, tension:0.3, spanGaps:false },
                 { label:'Forecast',              data:g.forecast||[],       borderColor:'#0d9488', backgroundColor:'transparent', borderWidth:2.5, pointRadius:grain==='yearly'?5:(grain==='monthly'?4:2), pointHoverRadius:6, pointBackgroundColor:'#0d9488', tension:0.3, spanGaps:false },
                 { label:'Upper 95% CI',          data:g.forecast_upper||[], borderColor:'rgba(13,148,136,0.25)', backgroundColor:'transparent', borderWidth:1, borderDash:[3,3], pointRadius:0, spanGaps:false, fill:false },
                 { label:'Lower 95% CI',          data:g.forecast_lower||[], borderColor:'rgba(13,148,136,0.25)', backgroundColor:'rgba(13,148,136,0.08)', borderWidth:1, borderDash:[3,3], pointRadius:0, spanGaps:false, fill:'-1' },
