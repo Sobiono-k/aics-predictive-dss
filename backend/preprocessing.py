@@ -2,15 +2,33 @@ import pandas as pd
 import os
 import traceback
 from sqlalchemy import create_engine
-from backend.config import Config
+from config import Config
 
-# Access the database URL safely
-engine = create_engine(
+# =========================================================
+# DATABASE ENGINE
+# =========================================================
+# Built once at import time from Config.DATABASE_URL (which itself is
+# built from DB_HOST / DB_USER / DB_PASS / DB_NAME / DB_PORT env vars).
+_engine = create_engine(
     Config.DATABASE_URL,
-    connect_args={"ssl": {"ssl_mode": "REQUIRED"}},
+    connect_args={"ssl": {"ssl_mode": "REQUIRED"}} if Config.DB_HOST not in ('localhost', '127.0.0.1') else {},
     pool_pre_ping=True,
     pool_recycle=3600
 )
+
+
+def get_engine():
+    """
+    Returns the shared SQLAlchemy engine used for both the request data
+    (via load_csv_data, though that currently reads from CSV) and the
+    forecast_cache / training_status tables used by app.py.
+    """
+    return _engine
+
+
+# =========================================================
+# LOAD DATA FROM LOCAL CSV
+# =========================================================
 
 def load_csv_data():
     try:

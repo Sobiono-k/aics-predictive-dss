@@ -1,16 +1,13 @@
 import os
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
 
 class Config:
-    DATABASE_URL = os.getenv("DATABASE_URL")
+    DB_HOST = os.environ.get('DB_HOST', 'localhost')
+    DB_USER = os.environ.get('DB_USER', 'root')
+    DB_PASS = os.environ.get('DB_PASS', '')
+    DB_NAME = os.environ.get('DB_NAME', 'aics_dss')
+    DB_PORT = os.environ.get('DB_PORT', '3306')
 
-    @staticmethod
-    def validate():
-        if not Config.DATABASE_URL:
-            raise ValueError("DATABASE_URL environment variable is not set!")
-
-# Validate on import
-Config.validate()
+    DATABASE_URL = (
+        f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
