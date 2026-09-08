@@ -328,10 +328,10 @@ $conn->close();
     <div class="train-box">
         <h2><div class="spin-ring" id="spinRing"></div>Running Prediction Models</h2>
         <div class="phase-row">
-            <span class="phase-badge idle" id="phase-data">📦 Data Prep</span>
-            <span class="phase-badge idle" id="phase-lstm">🧠 LSTM Training</span>
-            <span class="phase-badge idle" id="phase-rf">🌲 Random Forest</span>
-            <span class="phase-badge idle" id="phase-done">✅ Finalizing</span>
+            <span class="phase-badge idle" id="phase-data">Data Prep</span>
+            <span class="phase-badge idle" id="phase-lstm">LSTM Training</span>
+            <span class="phase-badge idle" id="phase-rf">Random Forest</span>
+            <span class="phase-badge idle" id="phase-done">Finalizing</span>
         </div>
         <div class="epoch-log" id="epochLog"></div>
         <div class="prog-wrap">
@@ -349,7 +349,7 @@ $conn->close();
                 <p>AICS Program of DSWD <i class="fas fa-chevron-right" style="font-size:10px;margin:0 5px;"></i> Batasan Hills</p>
                 <p style="margin:4px 0 0;color:#8392ab;font-size:13px;">LSTM-powered predictions — historical data 2022 – 2026 with forward projections</p>
             </div>
-            <button class="predict-btn" onclick="runPrediction()"><i class="fas fa-bolt"></i> Predict Forecast</button>
+            
         </div>
     </div>
 
@@ -676,66 +676,86 @@ function runPrediction() {
     ['data', 'lstm', 'rf', 'done'].forEach(p => setPhase(p, 'idle'));
     setProgress(0, 'Initializing…');
 
-    // 1. Point to your local PHP SSE wrapper (bypasses CORS & handles streaming)
-    const eventSource = new EventSource('api_train_proxy.php');
-
     setPhase('data', 'active');
     setProgress(5, 'Connecting to training worker…');
 
+    // 1. Connect to your PHP proxy script
+    const eventSource = new EventSource('api_train_proxy.php');
+
+    // 2. Listen for incoming SSE data
     eventSource.onmessage = function(e) {
-        const data = JSON.parse(e.data);
-        const msg = data.message;
+        try {
+            const data = JSON.parse(e.data);
+            const msg = data.message || '';
 
-        // Parse streamed backend messages
-        if (msg.includes('[DATA]')) {
-            setPhase('data', 'active');
-            setProgress(15, 'Preparing data…');
-            appendLog(msg, 'epoch-line');
-        } 
-        else if (msg.includes('[LSTM]')) {
-            setPhase('data', 'done');
-            setPhase('lstm', 'active');
-            
-            // Extract epoch number to compute progress bar percentage
-            const epochMatch = msg.match(/Epoch\s+(\d+)\/(\d+)/i);
-            if (epochMatch) {
-                const current = parseInt(epochMatch[1]);
-                const total = parseInt(epochMatch[2]);
-                const pct = Math.round(20 + (current / total) * 50);
-                setProgress(pct, `Training LSTM (Epoch ${current}/${total})`);
+            // Handle data loading state
+            if (msg.includes('[DATA]')) {
+                setPhase('data', 'active');
+                setProgress(15, 'Preparing data…');
+                appendLog(msg, 'epoch-line');
+            } 
+            // Handle LSTM model training state
+            else if (msg.includes('[LSTM]')) {
+                setPhase('data', 'done');
+                setPhase('lstm', 'active');
+                
+                // Calculate progress if epoch numbers are present
+                const epochMatch = msg.match(/Epoch\s+(\d+)\/(\d+)/i);
+                if (epochMatch) {
+                    const current = parseInt(epochMatch[1], 10);
+                    const total = parseInt(epochMatch[2], 10);
+                    const pct = Math.round(20 + (current / total) * 50);
+                    setProgress(pct, `Training LSTM (Epoch ${current}/${total})`);
+                }
+                appendLog(msg, 'loss-line');
+            } 
+            // Handle Random Forest state
+            else if (msg.includes('[RF]')) {
+                setPhase('lstm', 'done');
+                setPhase('rf', 'active');
+                setProgress(80, 'Fitting Random Forest…');
+                appendLog(msg, 'epoch-line');
+            } 
+            // Handle Error state
+            else if (msg.includes('[ERROR]')) {
+                eventSource.close();
+                appendLog(msg, 'done-line');
+                setProgress(100, 'Training failed');
+                
+                setTimeout(() => {
+                    if (confirm('Training encountered an error. Close window?')) {
+                        modal.classList.remove('open');
+                    }
+                }, 800);
             }
-            appendLog(msg, 'loss-line');
-        } 
-        else if (msg.includes('[RF]')) {
-            setPhase('lstm', 'done');
-            setPhase('rf', 'active');
-            setProgress(80, 'Fitting Random Forest…');
-            appendLog(msg, 'epoch-line');
-        } 
-        else if (msg.includes('[DONE]')) {
-            eventSource.close();
-            setPhase('rf', 'done');
-            setPhase('done', 'active');
-            setProgress(100, 'Complete — reloading dashboard…');
-            setPhase('done', 'done');
-            
-            if (spinRing) spinRing.style.borderTopColor = '#10b981';
+            // Handle Completion
+            else if (msg.includes('[DONE]')) {
+                eventSource.close(); // Cleanly close SSE connection
+                setPhase('rf', 'done');
+                setPhase('done', 'active');
+                setProgress(100, 'Complete — reloading dashboard…');
+                
+                if (spinRing) spinRing.style.borderTopColor = '#10b981';
 
-            setTimeout(() => {
-                window.location.reload();
-            }, 800);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            }
+        } catch (err) {
+            console.error('Failed to parse SSE payload:', err, e.data);
         }
     };
 
+    // 3. Handle network dropouts
     eventSource.onerror = function(err) {
         console.error('SSE Error:', err);
-        eventSource.close();
-        appendLog('[ERROR] Connection lost or training request timed out.', 'done-line');
+        eventSource.close(); // Stop automatic browser retry
+        
+        appendLog('[ERROR] Connection lost or proxy script timed out.', 'done-line');
         setProgress(100, 'Training failed');
         
-        // Reset UI so user isn't permanently locked out
         setTimeout(() => {
-            if (confirm('Training failed or timed out. Close modal?')) {
+            if (confirm('Connection timed out or failed. Close modal?')) {
                 modal.classList.remove('open');
             }
         }, 1000);
