@@ -62,10 +62,6 @@ def set_status(state: str, message: str = ""):
 
 
 def get_status() -> dict:
-    """
-    Returns the current status row, including how many minutes ago it was
-    last updated (used to detect a stale/crashed 'running' state).
-    """
     engine = get_engine()
     with engine.begin() as conn:
         row = conn.execute(
@@ -81,11 +77,22 @@ def get_status() -> dict:
         return {"state": "idle", "message": "", "updated_at": None, "stale": False}
 
     state, message, updated_at = row[0], row[1], row[2]
+
+    # updated_at may come back as a datetime, or as a string depending on
+    # driver/config — normalize it defensively so this never crashes.
+    if isinstance(updated_at, str):
+        try:
+            updated_at = datetime.fromisoformat(updated_at)
+        except (ValueError, TypeError):
+            updated_at = None
+
     stale = False
     if state == "running" and updated_at is not None:
-        # updated_at comes back as a datetime from SQLAlchemy/pymysql
-        age = datetime.utcnow() - updated_at
-        stale = age > timedelta(minutes=STALE_AFTER_MINUTES)
+        try:
+            age = datetime.utcnow() - updated_at
+            stale = age > timedelta(minutes=STALE_AFTER_MINUTES)
+        except TypeError:
+            stale = False  # if comparison still fails for any reason, don't crash
 
     return {
         "state": state,
@@ -93,7 +100,6 @@ def get_status() -> dict:
         "updated_at": updated_at.isoformat() if updated_at else None,
         "stale": stale,
     }
-
 
 def _run_training_job():
     """Runs in a background thread. Updates status as it goes."""
