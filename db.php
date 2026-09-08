@@ -1,9 +1,10 @@
 <?php
-$host    = getenv('DB_HOST') ?: 'localhost';
-$user    = getenv('DB_USER') ?: 'root';
-$pass    = getenv('DB_PASS') ?: '';
-$DB_NAME = getenv('DB_NAME') ?: 'aics_dss';
-$port    = getenv('DB_PORT') ?: 3306;
+// Retrieve environment variables with production Aiven defaults
+$host    = getenv('DB_HOST') ?: 'mysql-36a3dde9-aics-predictive-dss.d.aivencloud.com';
+$user    = getenv('DB_USER') ?: 'avnadmin';
+$pass    = getenv('DB_PASS') ?: ''; // Replace with new password
+$DB_NAME = getenv('DB_NAME') ?: 'defaultdb';                       // Must be defaultdb
+$port    = getenv('DB_PORT') ?: 19547;
 
 $conn = mysqli_init();
 
