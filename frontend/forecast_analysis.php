@@ -343,7 +343,7 @@ $conn->close();
 
 <div class="main">
     <div class="header-area">
-        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
             <div>
                 <h1>Request Volume Forecast</h1>
                 <p>AICS Program of DSWD <i class="fas fa-chevron-right" style="font-size:10px;margin:0 5px;"></i> Batasan Hills</p>
@@ -351,7 +351,9 @@ $conn->close();
             </div>
             
         </div>
-    </div>
+            <button class="predict-btn" onclick="runPrediction()" style="margin-left:auto; background:#4f46e5; color:#fff; border:none; padding:10px 18px; border-radius:10px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px;">
+    Train Model
+</button>
 
     <div style="max-width:100%; margin:0 auto; display:flex; flex-direction:column; gap:28px;">
 
