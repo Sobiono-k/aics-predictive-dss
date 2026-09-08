@@ -13,6 +13,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS']= '0'
 
 import sys
+import gc
 import json
 import numpy as np
 import pandas as pd
@@ -42,12 +43,16 @@ def make_sequences(values, window):
         y.append(values[i + window])
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
 
-def build_and_train(X_train, y_train, window, epochs=60, batch=32):
+def build_and_train(X_train, y_train, window, epochs=15, batch=32):
+    """
+    Lightweight single-layer LSTM. Reduced from a stacked 64/32-unit
+    architecture to fit comfortably within Render's free-tier 512MB RAM
+    and finish training well within the platform's request timeout.
+    """
     model = Sequential([
         Input(shape=(window, 1)),
-        LSTM(64, return_sequences=True),
-        LSTM(32, return_sequences=False),
-        Dense(32, activation='relu'),
+        LSTM(24, return_sequences=False),
+        Dense(16, activation='relu'),
         Dense(1),
     ])
     model.compile(optimizer='adam', loss='mae')
@@ -87,11 +92,6 @@ def load_base_series():
     from 2022-01-01 through the last date present in the data.
     """
     df = load_csv_data()
-
-    # ── DIAGNOSTIC: remove once root cause confirmed ──
-    print(f"DEBUG load_base_series: shape={df.shape}", file=sys.stderr)
-    print(f"DEBUG load_base_series: columns={df.columns.tolist()}", file=sys.stderr)
-    print(f"DEBUG load_base_series: head=\n{df.head(3)}", file=sys.stderr)
 
     if 'request_date' not in df.columns:
         raise ValueError(
@@ -152,8 +152,9 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
     X_test,  y_test  = X[split:], y[split:]
 
     # ── Train ──
-    epochs = 80 if freq == 'YS' else 60
-    batch  = 8  if freq in ('MS', 'YS') else 16
+    # Reduced epochs/batch sizing to stay within free-tier memory & time limits.
+    epochs = 20 if freq == 'YS' else 15
+    batch  = 16 if freq in ('MS', 'YS') else 32
     model  = build_and_train(X_train, y_train, window, epochs=epochs, batch=batch)
 
     # ── In-sample predictions ──
@@ -222,7 +223,7 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
 
     n_hist_offset = len(hist_labels) - 1
 
-    return {
+    result = {
         "labels":         all_labels,
         "actual":         padded_actuals,
         "predicted":      padded_preds,
@@ -234,6 +235,19 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
             "margin_of_error_95": safe_round(moe),
         },
     }
+
+    # ── MEMORY CLEANUP ──
+    # Explicitly drop the model and clear Keras/TF's backend session so
+    # memory from this grain's training run doesn't accumulate into the
+    # next grain's run within the same process. This is the single biggest
+    # factor in avoiding OOM kills when training weekly → monthly → yearly
+    # back-to-back on a memory-constrained host.
+    del model, X, y, X_train, y_train, X_test, y_test
+    del pred_norm, y_flat, actual_vals, pred_vals
+    tf.keras.backend.clear_session()
+    gc.collect()
+
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────
