@@ -1,10 +1,22 @@
 import pandas as pd
 import os
 import traceback
+from sqlalchemy import create_engine
+
+
 
 # =========================================================
 # LOAD DATA FROM LOCAL CSV
 # =========================================================
+def get_engine():
+    """Returns a SQLAlchemy DB engine for MySQL connection."""
+    db_user = os.getenv('DB_USER', 'root')
+    db_pass = os.getenv('DB_PASS', '')
+    db_host = os.getenv('DB_HOST', 'localhost')
+    db_name = os.getenv('DB_NAME', 'aics_dss')
+    
+    connection_string = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}/{db_name}"
+    return create_engine(connection_string)
 
 def load_csv_data():
     try:
