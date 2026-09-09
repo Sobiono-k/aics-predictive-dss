@@ -1,10 +1,22 @@
 <?php
-// Retrieve environment variables with production Aiven defaults
-$host    = getenv('DB_HOST') ?: 'mysql-36a3dde9-aics-predictive-dss.d.aivencloud.com';
-$user    = getenv('DB_USER') ?: 'avnadmin';
-$pass    = getenv('DB_PASS') ?:
-$DB_NAME = getenv('DB_NAME') ?: 'aics_dss';                    
-$port    = getenv('DB_PORT') ?: 19547;
+
+$envPath = __DIR__ . '/.env';
+if (file_exists($envPath)) {
+    $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos(trim($line), '#') === 0) continue; // skip comments
+        [$key, $value] = array_map('trim', explode('=', $line, 2));
+        if (!getenv($key)) {
+            putenv("$key=$value");
+        }
+    }
+}
+
+$host    = getenv('DB_HOST') ?: 'localhost';
+$user    = getenv('DB_USER') ?: 'root';
+$pass    = getenv('DB_PASS') ?: '';
+$DB_NAME = getenv('DB_NAME') ?: 'aics_dss';
+$port    = getenv('DB_PORT') ?: 3306;
 
 $conn = mysqli_init();
 
