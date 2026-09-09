@@ -117,14 +117,24 @@ def train_model(df, le_cause, feature_cols):
     X = df[feature_cols].values
     y = le_cause.transform(df['medical_cause'])
 
+    # NOTE: n_jobs is intentionally set to 1 (not -1) for both the model and
+    # cross_val_score below. On constrained/shared-CPU hosts like Render's
+    # free tier, n_jobs=-1 spawns one OS-level subprocess per (virtual) core
+    # via joblib's multiprocessing/loky backend. Combined with the fact that
+    # this whole function already runs inside a background threading.Thread
+    # (see app.py's _run_training_job), that extra layer of multiprocessing
+    # on top of threading tends to cause severe slowdowns or outright hangs
+    # rather than speeding anything up — there simply isn't enough real CPU
+    # to parallelize onto, and the process contention can stall the entire
+    # single Gunicorn worker, which is why status polling appeared to freeze.
     rf = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=12,
+        n_estimators=80,
+        max_depth=10,
         min_samples_split=5,
         min_samples_leaf=2,
         class_weight='balanced',
         random_state=RANDOM_STATE,
-        n_jobs=-1,
+        n_jobs=1,
     )
     rf.fit(X, y)
 
@@ -132,9 +142,9 @@ def train_model(df, le_cause, feature_cols):
     try:
         min_class_count = pd.Series(y).value_counts().min()
         cv_folds = min(3, min_class_count)
-        
+
         if cv_folds >= 2 and len(np.unique(y)) > 1:
-            scores = cross_val_score(rf, X, y, cv=cv_folds, scoring='accuracy', n_jobs=-1)
+            scores = cross_val_score(rf, X, y, cv=cv_folds, scoring='accuracy', n_jobs=1)
             cv_accuracy = float(scores.mean())
         else:
             cv_accuracy = 0.78  # Alternate fallback strategy if splits are impossible
