@@ -376,7 +376,7 @@ def train_lstm():
     }
 
 
-# Alias for backwards compatibility if needed
+# Alias for backwards compatibility if needed ewqr
 run_lstm = train_lstm
 
 
