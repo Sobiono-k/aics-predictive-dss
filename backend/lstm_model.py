@@ -112,7 +112,7 @@ def load_base_series():
 
 
 # ─────────────────────────────────────────────────────────────────
-# PER-GRAIN PIPELINE
+# PER-GRAIN PIPELINE (used for weekly / monthly)
 # ─────────────────────────────────────────────────────────────────
 
 def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
@@ -176,7 +176,7 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
     if len(norm_test_residuals) > 1:
         norm_std = np.std(norm_test_residuals, ddof=1)
     else:
-        # Fallback to full sequence residual standard deviation if split pool contains only 1 item (Yearly grain)
+        # Fallback to full sequence residual standard deviation if split pool contains only 1 item
         norm_std = np.std(y_flat - pred_norm, ddof=1) if len(y_flat) > 1 else np.std(norm_vals)
 
     # ── Forecast ──
@@ -240,14 +240,98 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
     # Explicitly drop the model and clear Keras/TF's backend session so
     # memory from this grain's training run doesn't accumulate into the
     # next grain's run within the same process. This is the single biggest
-    # factor in avoiding OOM kills when training weekly → monthly → yearly
-    # back-to-back on a memory-constrained host.
+    # factor in avoiding OOM kills when training weekly → monthly back-to-back
+    # on a memory-constrained host.
     del model, X, y, X_train, y_train, X_test, y_test
     del pred_norm, y_flat, actual_vals, pred_vals
     tf.keras.backend.clear_session()
     gc.collect()
 
     return result
+
+
+# ─────────────────────────────────────────────────────────────────
+# YEARLY PIPELINE — linear trend extrapolation instead of LSTM
+# ─────────────────────────────────────────────────────────────────
+
+def run_yearly_trend(daily_series, forecast_steps=5, label_fmt='%Y'):
+    """
+    Yearly grain has too few data points (one per year) for an LSTM to
+    learn anything meaningful — with only ~5 years of history, a neural
+    net forecasting autoregressively just converges to echoing a flat
+    value (the earlier flatlined-at-2165 symptom).
+
+    Instead, fit a simple linear trend (least-squares regression) directly
+    on the actual yearly totals and extrapolate forward. This genuinely
+    reflects whether client volume is trending up or down, rather than
+    pretending a deep model learned something from 5 numbers. It's also
+    effectively free computationally, which helps overall memory/time
+    budget on constrained hosts.
+    """
+    ts = daily_series.resample('YS').sum().fillna(0)
+    raw_values = ts.values.astype(float)
+    date_index = ts.index
+    n = len(raw_values)
+
+    if n < 2:
+        raise ValueError(f"[yearly] Only {n} year(s) of data — need at least 2.")
+
+    # ── Fit linear trend: value = slope * year_index + intercept ──
+    x = np.arange(n, dtype=float)
+    slope, intercept = np.polyfit(x, raw_values, 1)
+
+    fitted_vals = slope * x + intercept  # "model fit" / in-sample line
+
+    # ── Residual-based confidence interval ──
+    residuals = raw_values - fitted_vals
+    if n > 2:
+        resid_std = np.std(residuals, ddof=1)
+    else:
+        resid_std = abs(raw_values[-1] - raw_values[0]) * 0.15  # rough fallback for n==2
+
+    # ── Forecast forward ──
+    future_x = np.arange(n, n + forecast_steps, dtype=float)
+    future_vals = np.maximum(0, slope * future_x + intercept)
+
+    # Uncertainty widens the further out we forecast
+    steps_ahead = np.arange(1, forecast_steps + 1)
+    forecast_lower = np.maximum(0, future_vals - 1.96 * resid_std * np.sqrt(steps_ahead))
+    forecast_upper = future_vals + 1.96 * resid_std * np.sqrt(steps_ahead)
+
+    mae = float(np.mean(np.abs(residuals)))
+    moe = float(np.mean(forecast_upper - future_vals))
+
+    # ── Labels ──
+    last_date = date_index[-1]
+    future_idx = pd.date_range(start=last_date + pd.DateOffset(years=1),
+                                periods=forecast_steps, freq='YS')
+    hist_labels   = date_index.strftime(label_fmt).tolist()
+    future_labels = future_idx.strftime(label_fmt).tolist()
+    all_labels    = hist_labels + future_labels
+
+    # ── Assemble in the same shape run_grain() returns ──
+    padded_actuals = [safe_round(v) for v in raw_values.tolist()] + [None] * forecast_steps
+    padded_preds   = [safe_round(v) for v in fitted_vals.tolist()] + [None] * forecast_steps
+
+    last_actual_val = raw_values[-1]
+    combined_forecast = [last_actual_val] + future_vals.tolist()
+    combined_lower    = [last_actual_val] + forecast_lower.tolist()
+    combined_upper    = [last_actual_val] + forecast_upper.tolist()
+
+    n_hist_offset = n - 1
+
+    return {
+        "labels":         all_labels,
+        "actual":         padded_actuals,
+        "predicted":      padded_preds,
+        "forecast":       nullpad(combined_forecast, n_hist_offset),
+        "forecast_lower": nullpad(combined_lower,    n_hist_offset),
+        "forecast_upper": nullpad(combined_upper,    n_hist_offset),
+        "metrics": {
+            "mae":                safe_round(mae),
+            "margin_of_error_95": safe_round(moe),
+        },
+    }
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -281,13 +365,9 @@ def train_lstm():
     )
 
     # ── YEARLY ──
-    yearly = run_grain(
-        daily,
-        freq           = 'YS',
-        window         = 1,
-        forecast_steps = 5,
-        label_fmt      = '%Y',
-    )
+    # Uses linear trend extrapolation instead of LSTM — see run_yearly_trend()
+    # for why: 5 data points is far too few for a neural network to learn from.
+    yearly = run_yearly_trend(daily, forecast_steps=5, label_fmt='%Y')
 
     return {
         "weekly":  weekly,
