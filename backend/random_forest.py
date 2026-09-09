@@ -402,7 +402,7 @@ def analyze_patterns():
 
 
 # ─────────────────────────────────────────────────────────────────
-# CLI PIPELINE EXECUTION (Subprocess / Direct script running)sss
+# CLI PIPELINE EXECUTION (Subprocess / Direct script running)sssfas
 # ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     try:
