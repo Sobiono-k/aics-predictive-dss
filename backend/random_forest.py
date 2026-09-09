@@ -402,7 +402,7 @@ def analyze_patterns():
 
 
 # ─────────────────────────────────────────────────────────────────
-# CLI PIPELINE EXECUTION (Subprocess / Direct script running)
+# CLI PIPELINE EXECUTION (Subprocess / Direct script running)sss
 # ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     try:
@@ -419,3 +419,4 @@ if __name__ == "__main__":
         }
         sys.stdout.write(json.dumps(fallback))
         sys.stdout.flush()
+        
