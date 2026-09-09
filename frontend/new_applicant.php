@@ -26,6 +26,7 @@ require_once 'auth.php';?>
             --sidebar-width: 260px;
             --primary: #3b82f6;
             --success: #10b981;
+            --dswd-blue: #0038a8;
         }
         
         body {  font-family: 'Inter', sans-serif;  margin: 0;  background: var(--bg-color);  display: grid; grid-template-columns: var(--sidebar-width) 1fr; min-height: 100vh; scrollbar-gutter: stable; 
@@ -48,6 +49,11 @@ require_once 'auth.php';?>
             from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        .header-area { margin-bottom: 25px; border-bottom: 2px solid var(--dswd-blue); padding-bottom: 20px; }
+        .header-area h4 { font-size: 12px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; margin: 0 0 4px; }
+        .header-area h1 { color: var(--dswd-dark); font-size: 24px; margin: 0; }
+        .header-area p { color: #8392ab; font-size: 12px; margin: 5px 0 0; }
 
         .alert-success {
             background: #dcfce7;
@@ -108,9 +114,11 @@ require_once 'auth.php';?>
 <?php if(file_exists('sidebar.php')) include 'sidebar.php'; ?>
 
 <div class="main">
-    <div style="margin-bottom: 25px;">
-        <h1 style="color: #344767; font-size: 24px; margin: 0;">New Applicant Registration</h1>
-        <p style="color: #8392ab; font-size: 14px;">Encoding Portal - Medical Assistance Program</p>
+    <div class="header-area">
+        <h4>Republic of the Philippines</h4>
+        <h1>New Applicant Registration</h1>
+        <p>Batasan Hills AICS - Department of Social Welfare and Development</p>
+        <p style="font-style: italic; margin-top: 4px;">Encoding Portal - Medical Assistance Program</p>
     </div>
 
     <?php if(isset($_GET['status']) && $_GET['status'] == 'success'): ?>
