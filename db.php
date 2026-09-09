@@ -40,4 +40,3 @@ if ($host !== 'localhost' && $host !== '127.0.0.1') {
 if (!@mysqli_real_connect($conn, $host, $user, $pass, $DB_NAME, (int)$port, NULL, $flags)) {
     die("Database Connection Failed: " . mysqli_connect_error());
 }
-?> 
