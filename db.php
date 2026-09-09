@@ -29,4 +29,3 @@ if (!@mysqli_real_connect($conn, $host, $user, $pass, $DB_NAME, (int)$port, NULL
     die("Database Connection Failed: " . mysqli_connect_error());
 }
 ?> 
-// d
