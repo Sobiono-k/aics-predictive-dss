@@ -153,7 +153,7 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
 
     # ── Train ──
     # Reduced epochs/batch sizing to stay within free-tier memory & time limits.
-    epochs = 20 if freq == 'YS' else 15
+    epochs = 15 if freq == 'YS' else 10
     batch  = 16 if freq in ('MS', 'YS') else 32
     model  = build_and_train(X_train, y_train, window, epochs=epochs, batch=batch)
 

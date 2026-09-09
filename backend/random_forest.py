@@ -128,8 +128,8 @@ def train_model(df, le_cause, feature_cols):
     # to parallelize onto, and the process contention can stall the entire
     # single Gunicorn worker, which is why status polling appeared to freeze.
     rf = RandomForestClassifier(
-        n_estimators=80,
-        max_depth=10,
+        n_estimators=40,
+        max_depth=8,
         min_samples_split=5,
         min_samples_leaf=2,
         class_weight='balanced',

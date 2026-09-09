@@ -17,7 +17,7 @@ STATUS_KEY = "training_v1"
 
 # If a training run has been "running" for longer than this with no update,
 # assume the worker crashed (e.g. OOM-killed) and allow a fresh run to start.
-STALE_AFTER_MINUTES = 10
+STALE_AFTER_MINUTES = 2
 
 # Simple in-process lock so two training runs can't overlap on the same worker
 _training_lock = threading.Lock()
