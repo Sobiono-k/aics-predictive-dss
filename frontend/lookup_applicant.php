@@ -109,7 +109,7 @@ function pgUrl($p) {
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { overflow-y: scroll; }
-        :root { --dswd-dark: #2c3e50; --sidebar-bg: #1e293b; --bg-color: #f8fafc; --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); --sidebar-width: 260px; }
+        :root { --dswd-dark: #2c3e50; --sidebar-bg: #1e293b; --bg-color: #f8fafc; --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); --sidebar-width: 260px; --dswd-blue: #0038a8; }
         body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg-color); display: flex; color: #334155; }
         .sidebar { width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); position: fixed; left: 0; top: 0; color: #fff; display: flex; flex-direction: column; z-index: 1000; }
         .sidebar-header { padding: 30px 20px; text-align: center; background: rgba(0,0,0,0.2); }
@@ -129,6 +129,12 @@ function pgUrl($p) {
             border-left: 4px solid #3b82f6; 
         }
         .main { margin-left: 260px; padding: 40px; width: calc(100% - 260px); min-height: 100vh; }
+
+        /* ── Header ── */
+        .header-area { margin-bottom: 28px; border-bottom: 2px solid var(--dswd-blue); padding-bottom: 20px; }
+        .header-area h4 { font-size: 12px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; margin: 0 0 4px; }
+        .header-area h1 { margin: 0; font-size: 24px; color: var(--dswd-dark); }
+        .header-area p { color: #64748b; font-size: 12px; margin-top: 5px; }
 
         /* ── Stat cards ── */
         .stat-card {
@@ -267,20 +273,14 @@ function pgUrl($p) {
     <?php endif; ?>
 
     <!-- Page Header -->
-    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 28px;">
-        <div>
-            <h1 style="margin:0; font-size:28px; color:var(--dswd-dark);">Pending Applicants</h1>
-            <p style="color:#64748b; margin-top:5px;">Online QR submissions awaiting counter confirmation</p>
-        </div>
-        <button onclick="document.getElementById('qrModal').style.display='block'"
-                style="display:flex; align-items:center; gap:10px; padding:12px 22px; background:#003893; color:#fff; border:none; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; transition:.2s;"
-                onmouseover="this.style.background='#002a6d'" onmouseout="this.style.background='#003893'">
-            <i class="fas fa-qrcode" style="font-size:18px;"></i> Show QR Code
-        </button>
+    <div class="header-area">
+        <h4>Republic of the Philippines</h4>
+        <h1>Pending Applicants</h1>
+        <p>Batasan Hills AICS - Department of Social Welfare and Development</p>
     </div>
 
-    <!-- Stat Card -->
-    <div style="display:flex; gap:16px; margin-bottom:24px;">
+    <!-- Stat Card + QR Button -->
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px;">
         <div class="stat-card" style="min-width:220px;">
             <div class="stat-icon" style="background:#fef3c7; color:#d97706;">
                 <i class="fas fa-clock"></i>
@@ -290,6 +290,12 @@ function pgUrl($p) {
                 <div style="font-size:26px; font-weight:800; color:#1e293b;"><?php echo number_format($total_count); ?></div>
             </div>
         </div>
+
+        <button onclick="document.getElementById('qrModal').style.display='block'"
+                style="display:flex; align-items:center; gap:10px; padding:12px 22px; background:#003893; color:#fff; border:none; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; transition:.2s;"
+                onmouseover="this.style.background='#002a6d'" onmouseout="this.style.background='#003893'">
+            <i class="fas fa-qrcode" style="font-size:18px;"></i> Show QR Code
+        </button>
     </div>
 
     <!-- Code Lookup Bar -->

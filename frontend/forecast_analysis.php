@@ -262,6 +262,7 @@ $conn->close();
             --bg-color: #f0f2f5;
             --card-shadow: 0 2px 12px rgba(0,0,0,0.08);
             --sidebar-width: 260px;
+            --dswd-blue: #0038a8;
         }
         body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg-color); display: flex; color: #334155; }
         .sidebar { width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); position: fixed; left: 0; top: 0; color: #fff; display: flex; flex-direction: column; z-index: 1000; }
@@ -269,8 +270,9 @@ $conn->close();
         .sidebar a { padding: 15px 25px; text-decoration: none; color: #94a3b8; display: flex; align-items: center; transition: 0.3s; border-left: 4px solid transparent; }
         .sidebar a:hover, .sidebar a.active { background: #334155; color: #fff; border-left: 4px solid #3b82f6; }
         .main { margin-left: var(--sidebar-width); padding: 40px; width: calc(100% - var(--sidebar-width)); min-height: 100vh; }
-        .header-area { margin-bottom: 30px; }
-        .header-area h1 { margin: 0; font-size: 22px; color: #344767; }
+        .header-area { margin-bottom: 30px; border-bottom: 2px solid var(--dswd-blue); padding-bottom: 20px; }
+        .header-area h4 { font-size: 12px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; margin: 0 0 4px; }
+        .header-area h1 { margin: 0; font-size: 24px; color: color: var(--dswd-dark); }
         .header-area p { color: #8392ab; margin: 5px 0 0; font-style: italic; }
         .forecast-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
         .f-card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: var(--card-shadow); }
@@ -343,26 +345,22 @@ $conn->close();
 
 <div class="main">
     <div class="header-area">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
-            <div>
-                <h1>Request Volume Forecast</h1>
-                <p>AICS Program of DSWD <i class="fas fa-chevron-right" style="font-size:10px;margin:0 5px;"></i> Batasan Hills</p>
-                <p style="margin:4px 0 0;color:#8392ab;font-size:13px;">LSTM-powered predictions — historical data 2022 – 2026 with forward projections</p>
-            </div>
-            
-        </div>
-            <button class="predict-btn" onclick="runPrediction()" style="margin-left:auto; background:#4f46e5; color:#fff; border:none; padding:10px 18px; border-radius:10px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px;">
-    Train Model
-</button>
+        <h4>Republic of the Philippines</h4>
+        <h1>Forecast Analysis</h1>
+        <p style="margin-top:5px; font-style:normal; color:#64748b; font-size:12px;">Batasan Hills AICS - Department of Social Welfare and Development</p>
+    </div>
 
     <div style="max-width:100%; margin:0 auto; display:flex; flex-direction:column; gap:28px;">
 
-        <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px;">
             <div style="display:inline-flex; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px; padding:4px; gap:4px;">
                 <button onclick="switchTab('weekly')" id="tab-weekly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; transition:all .2s;">Weekly</button>
                 <button onclick="switchTab('monthly')" id="tab-monthly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">Monthly</button>
                 <button onclick="switchTab('yearly')" id="tab-yearly" class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">Yearly</button>
             </div>
+            <button class="predict-btn" onclick="runPrediction()" style="background:#4f46e5; color:#fff; border:none; padding:10px 18px; border-radius:10px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                Train Model
+            </button>
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px;" id="metricCards">

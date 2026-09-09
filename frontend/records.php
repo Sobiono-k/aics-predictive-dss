@@ -355,15 +355,16 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { overflow-y: scroll; }
-        :root { --dswd-dark: #2c3e50; --sidebar-bg: #1e293b; --bg-color: #f8fafc; --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); --sidebar-width: 260px; }
+        :root { --dswd-dark: #2c3e50; --sidebar-bg: #1e293b; --bg-color: #f8fafc; --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); --sidebar-width: 260px; --dswd-blue: #0038a8; }
         body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg-color); display: flex; color: #334155; }
         .sidebar { width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); position: fixed; left: 0; top: 0; color: #fff; display: flex; flex-direction: column; z-index: 1000; }
         .sidebar-header { padding: 30px 20px; text-align: center; background: rgba(0,0,0,0.2); }
         .sidebar a { padding: 15px 25px; text-decoration: none; color: #94a3b8; display: flex; align-items: center; transition: all 0.3s ease; border-left: 4px solid transparent; }
         .sidebar a:hover, .sidebar a.active { background: rgba(255, 255, 255, 0.05); color: #fff; border-left: 4px solid #3b82f6; }
         .main { margin-left: 260px; padding: 40px; width: calc(100% - 260px); min-height: 100vh; }
-        .header-area { margin-bottom: 30px; }
-        .header-area h1 { margin: 0; font-size: 24px; color: var(--dswd-dark); }
+        .header-area { margin-bottom: 30px; border-bottom: 2px solid var(--dswd-blue); padding-bottom: 20px; }
+        .header-area h4 { font-size: 12px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
+        .header-area h1 { margin: 5px 0 0; font-size: 24px; color: var(--dswd-dark); }
         .table-container { background: #fff; border-radius: 12px; box-shadow: var(--card-shadow); overflow: hidden; border: 1px solid #e2e8f0; }
         .filter-header { padding: 20px; background: #fff; border-bottom: 1px solid #f1f5f9; }
         .controls-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 15px; }
@@ -445,12 +446,21 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
     <form id="filterForm" method="GET">
         <input type="hidden" name="limit" value="<?php echo $limit; ?>">
 
-        <div class="header-area" style="display: flex; justify-content: space-between; align-items: flex-end;">
-            <div>
-                <h1 style="margin:0; color:var(--dswd-dark); font-size: 28px;">Beneficiary Records</h1>
-                <p style="color:#64748b; margin-top: 5px;">Historical database of AICS interventions</p>
+        <div class="header-area">
+            <h4>Republic of the Philippines</h4>
+            <h1 style="margin:0; color:var(--dswd-dark); font-size: 24px;">Beneficiary Records</h1>
+            <p style="color:#64748b; font-size: 12px; margin-top: 5px;">Batasan Hills AICS - Department of Social Welfare and Development</p>
+        </div>
+
+        <div style="margin-top: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+            <div class="total-counter-box" style="margin-bottom: 0;">
+                <div class="counter-icon"><i class="fas fa-users"></i></div>
+                <div>
+                    <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Applicants</div>
+                    <div style="font-size: 24px; font-weight: 700; color: #1e293b;"><?php echo number_format($total_records); ?></div>
+                </div>
             </div>
-            
+
             <div style="display: flex; gap: 10px; align-items: center;">
                 <a href="records.php?action=find_duplicates" class="btn-duplicate">
                     <i class="fas fa-copy"></i> Find Duplicates
@@ -460,21 +470,9 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
                     <i class="fas fa-file-csv"></i> Import CSV
                 </button>
 
-                <div style="display: flex; gap: 10px;">
-                    <a href="<?php echo $excel_url; ?>" class="btn-excel">
-                        <i class="fas fa-file-excel"></i> Print Records
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <div style="margin-top: 20px; margin-bottom: 20px;">
-            <div class="total-counter-box">
-                <div class="counter-icon"><i class="fas fa-users"></i></div>
-                <div>
-                    <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Applicants</div>
-                    <div style="font-size: 24px; font-weight: 700; color: #1e293b;"><?php echo number_format($total_records); ?></div>
-                </div>
+                <a href="<?php echo $excel_url; ?>" class="btn-excel">
+                    <i class="fas fa-file-excel"></i> Print Records
+                </a>
             </div>
         </div>
 
