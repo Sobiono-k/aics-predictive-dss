@@ -344,25 +344,21 @@ def train_lstm():
 
     # ── WEEKLY ──
     weekly = run_grain(
-        daily,
-        freq           = 'W-MON',
-        window         = 26,
-        forecast_steps = 26,
-        label_fmt      = '%Y-W%V',
-    )
+    daily,
+    freq           = 'W-MON',
+    window         = 26,
+    forecast_steps = 26,
+    label_fmt      = '%b %d, %Y',   # e.g. "Sep 01, 2022" (the Monday that starts each week)
+)
 
     # ── MONTHLY ──
-    last_month       = daily.index[-1].to_period('M')
-    end_2026         = pd.Period('2026-12', freq='M')
-    months_remaining = max(1, (end_2026 - last_month).n)
-
     monthly = run_grain(
-        daily,
-        freq           = 'MS',
-        window         = 12,
-        forecast_steps = months_remaining,
-        label_fmt      = '%Y-%m',
-    )
+    daily,
+    freq           = 'MS',
+    window         = 12,
+    forecast_steps = 12,   # always forecast 12 months ahead, rolling — not tied to a hardcoded year
+    label_fmt      = '%b %Y',
+)
 
     # ── YEARLY ──
     # Uses linear trend extrapolation instead of LSTM — see run_yearly_trend()
