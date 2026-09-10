@@ -470,10 +470,6 @@ $conn->close();
             <h1>Reports & Analytics</h1>
             <p style="color:#64748b; font-size: 12px;">Batasan Hills AICS - Department of Social Welfare and Development</p>
         </div>
-        <span class="engine-badge <?php echo $isRealModel ? 'live' : 'fallback'; ?>">
-            <i class="fas <?php echo $isRealModel ? 'fa-bolt' : 'fa-database'; ?>"></i>
-            <?php echo $isRealModel ? 'Live ML Model' : 'Database Fallback Engine'; ?>
-        </span>
     </div>
 
     <div class="report-grid no-print">
