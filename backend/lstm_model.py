@@ -193,7 +193,7 @@ def run_grain(daily_series, freq, window, forecast_steps, label_fmt):
     forecast_upper = unscale(upper_norm_bounds, mn, mx)
 
     # Representative margin of error for display cards
-    moe = float(np.mean(forecast_upper - future_vals))
+    moe = float(np.mean((forecast_upper - forecast_lower) / 2))
 
     # ── Future date labels ──
     last_date = date_index[-1]
