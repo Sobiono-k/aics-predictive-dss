@@ -290,15 +290,17 @@ echo "<script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
         html{overflow-y:scroll}
-        :root{--dswd-dark:#2c3e50;--sidebar-bg:#1e293b;--bg-color:#f8fafc;--card-shadow:0 4px 6px -1px rgba(0,0,0,0.1);--sidebar-width:260px}
+        :root{--dswd-dark:#2c3e50;--sidebar-bg:#1e293b;--bg-color:#f8fafc;--card-shadow:0 4px 6px -1px rgba(0,0,0,0.1);--sidebar-width:260px;--dswd-blue:#0038a8}
         body{font-family:'Inter',sans-serif;margin:0;background:var(--bg-color);display:flex;color:#334155}
         .sidebar{width:var(--sidebar-width);height:100vh;background:var(--sidebar-bg);position:fixed;left:0;top:0;color:#fff;display:flex;flex-direction:column;z-index:1000}
         .sidebar-header{padding:30px 20px;text-align:center;background:rgba(0,0,0,0.2)}
         .sidebar a{padding:15px 25px;text-decoration:none;color:#94a3b8;display:flex;align-items:center;transition:all 0.3s ease;border-left:4px solid transparent}
         .sidebar a:hover,.sidebar a.active{background:rgba(255,255,255,0.05);color:#fff;border-left:4px solid #3b82f6}
         .main{margin-left:260px;padding:40px;width:calc(100% - 260px);min-height:100vh}
-        .header-area{margin-bottom:30px}
+        .header-area{margin-bottom:30px;border-bottom:2px solid var(--dswd-blue);padding-bottom:20px}
+        .header-area h4{font-size:12px;text-transform:uppercase;color:#64748b;letter-spacing:1px;margin:0 0 4px}
         .header-area h1{margin:0;font-size:24px;color:var(--dswd-dark)}
+        .header-area p{color:#64748b;font-size:12px;margin-top:5px}
         .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:30px}
         .card{background:#fff;padding:24px;border-radius:12px;box-shadow:var(--card-shadow);border-bottom:4px solid #e2e8f0}
         .card.highlight{border-bottom-color:#3b82f6}
@@ -361,8 +363,9 @@ echo "<script>
 
 <div class="main">
     <div class="header-area">
+        <h4>Republic of the Philippines</h4>
         <h1>Predictive Decision Support Dashboard</h1>
-        <p>AICS Program Analytics — Batasan Hills</p>
+        <p>Batasan Hills AICS - Department of Social Welfare and Development</p>
     </div>
 
     <!-- KPI CARDS -->
