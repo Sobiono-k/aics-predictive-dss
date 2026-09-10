@@ -108,13 +108,13 @@ def _run_training_job():
         df = load_csv_data()
 
         set_status("running", "Training LSTM models…")
-        lstm_forecast = run_lstm(df)
+        lstm_forecast = run_lstm()
 
         set_status("running", "Training Random Forest…")
-        cause_patterns = analyze_patterns(df)
+        cause_patterns = analyze_patterns()
 
         set_status("running", "Computing trend forecast…")
-        trend_forecast = forecast_next(df)
+        trend_forecast = forecast_next()
 
         response = {
             'random_forest': cause_patterns,
