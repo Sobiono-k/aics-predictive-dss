@@ -16,7 +16,7 @@ require_once 'auth.php';?>
 <head>
     <meta charset="UTF-8">
     <title>New Applicant</title>
-    <link rel="icon" type="image/png" href="/aics_predictive_dss/images/dswdlogo2.png">
+    <link rel="icon" type="image/png" href="<?php echo BASE_URL; ?>images/dswdlogo2.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
