@@ -84,7 +84,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($conn->query($sql) === TRUE) {
         $newID = $conn->insert_id;
 
-        // Update id_number format (e.g., QC-0001)
+        // Update id_number format (e.g., QC-0001)dds
         $formattedID = "QC-" . $newID; 
         $conn->query("UPDATE aics_sample_data SET id_number = '$formattedID' WHERE id = $newID");
 
@@ -94,4 +94,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         die("Error processing request: " . $conn->error);
     }
 }
-?>
+?>   
