@@ -115,6 +115,7 @@ if ($data === null || !isset($data['weekly'], $data['monthly'], $data['yearly'])
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AICS LSTM Forecast Dashboard</title>
+    <link rel="icon" type="image/png" href="/aics_predictive_dss/images/dswdlogo2.png">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <style>
