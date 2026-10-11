@@ -27,7 +27,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             // --- REMEMBER ME COOKIE HANDLING ---
             if ($remember) {
-                // Sine-save ang username sa browser ng 30 araw (86400 segundo = 1 araw)
+                // Sine-save ang username sa browser ng 30 araw (86400 segundo * 30 araw)
                 setcookie("remember_user", $user_input, time() + (86400 * 30), "/"); 
             } else {
                 // Kung hindi naka-check, pinupuwersang i-expire ang cookie upang mabura sa browser
