@@ -1,4 +1,7 @@
 <?php
+// In your db.php or a central config file:
+$is_local = ($_SERVER['SERVER_NAME'] === 'localhost' || $_SERVER['SERVER_NAME'] === '127.0.0.1');
+define('BASE_URL', $is_local ? '/aics_predictive_dss/' : '/');
 
 $envPath = __DIR__ . '/.env';
 if (file_exists($envPath)) {
