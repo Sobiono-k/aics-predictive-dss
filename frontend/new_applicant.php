@@ -100,6 +100,8 @@ require_once 'auth.php';?>
         .cat-title { font-weight: 800; color: #1e293b; margin: 15px 0 8px 0; font-size: 10.5px; text-transform: uppercase; border-left: 3px solid #3b82f6; padding-left: 8px; }
         .item { display: flex; gap: 8px; margin-bottom: 8px; color: #475569; }
 
+        .field-error { color:#ef4444; font-size:10.5px; display:none; margin-top:4px; }
+
         @media print {
             .sidebar, .form-card, .main > div:first-child, .print-btn, .alert-success { display: none !important; }
             body { display: block; }
@@ -129,10 +131,15 @@ require_once 'auth.php';?>
 
     <div class="page-content">
         <div class="form-card">
-            <form action="save_applicant.php" method="POST">
+            <form action="save_applicant.php" method="POST" id="applicantForm">
                 <div class="row">
                     <div class="col"><label>Date of Request</label><input type="date" name="date" value="<?php echo date('Y-m-d'); ?>" required></div>
-                    <div class="col"><label>Email Address</label><input type="email" name="email" placeholder="email@example.com"></div>
+                    <div class="col">
+                        <label>Email Address</label>
+                        <input type="email" name="email" id="email_input" placeholder="email@example.com"
+                               pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$">
+                        <small id="email_error" class="field-error">Please enter a valid email address.</small>
+                    </div>
                 </div>
 
                 <div class="form-section-title">Patient's Personal Information</div>
@@ -166,7 +173,12 @@ require_once 'auth.php';?>
                     </div>
                 </div>
                 <div class="row">
-                    <div class="col"><label>Contact Number</label><input type="text" name="contact" required></div>
+                    <div class="col">
+                        <label>Contact Number</label>
+                        <input type="tel" name="contact" id="contact_input" maxlength="11" placeholder="09XXXXXXXXX"
+                               inputmode="numeric" pattern="[0-9]{11}" required>
+                        <small id="contact_error" class="field-error">Contact number must be 11 digits, numbers only.</small>
+                    </div>
                 </div>
                 
                 <div class="row">
@@ -227,9 +239,17 @@ require_once 'auth.php';?>
                     ];
                     foreach($subcategories as $sub): ?>
                         <label class="option-item">
-                            <input type="radio" name="client_subcategory" value="<?php echo $sub; ?>" required> <?php echo $sub; ?>
+                            <input type="radio" name="client_subcategory" value="<?php echo $sub; ?>"
+                                   <?php echo ($sub === 'Others specify') ? 'id="subcat_others_radio"' : ''; ?> required> <?php echo $sub; ?>
                         </label>
                     <?php endforeach; ?>
+                </div>
+
+                <div class="row" id="subcat_others_wrap" style="display:none;">
+                    <div class="col">
+                        <label>Please specify Subcategory</label>
+                        <input type="text" name="client_subcategory_other" id="subcat_others_input" placeholder="Enter specific subcategory">
+                    </div>
                 </div>
 
                 <div class="form-section-title">Monthly Household Income</div>
@@ -376,6 +396,82 @@ input.addEventListener('input', function() {
 
 document.addEventListener('click', (e) => {
     if (e.target !== input) suggestionBox.style.display = 'none';
+});
+
+// ── 1. Email validation ──
+const emailInput = document.getElementById('email_input');
+const emailError = document.getElementById('email_error');
+const emailPattern = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+
+emailInput.addEventListener('input', function() {
+    if (this.value.trim() === '') {
+        emailError.style.display = 'none';
+        this.style.borderColor = '#d2d6da';
+        return;
+    }
+    const valid = emailPattern.test(this.value.trim());
+    emailError.style.display = valid ? 'none' : 'block';
+    this.style.borderColor = valid ? '#10b981' : '#ef4444';
+});
+
+// ── 2. Contact number — numeric only, 11-digit PH format ──
+const contactInput = document.getElementById('contact_input');
+const contactError = document.getElementById('contact_error');
+
+contactInput.addEventListener('input', function() {
+    // Strip any non-digit characters as the user types
+    this.value = this.value.replace(/\D/g, '').slice(0, 11);
+
+    const valid = this.value.length === 11;
+    contactError.style.display = (this.value.length > 0 && !valid) ? 'block' : 'none';
+    this.style.borderColor = this.value.length === 0 ? '#d2d6da' : (valid ? '#10b981' : '#ef4444');
+});
+
+contactInput.addEventListener('keypress', function(e) {
+    // Block non-numeric keystrokes outright (belt-and-suspenders alongside the input handler above)
+    if (!/[0-9]/.test(e.key)) {
+        e.preventDefault();
+    }
+});
+
+// ── 3. "Others specify" conditional field for Client Subcategory ──
+const subcatRadios = document.getElementsByName('client_subcategory');
+const othersWrap    = document.getElementById('subcat_others_wrap');
+const othersInput   = document.getElementById('subcat_others_input');
+
+subcatRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+        if (this.id === 'subcat_others_radio') {
+            othersWrap.style.display = 'flex';
+            othersInput.required = true;
+        } else {
+            othersWrap.style.display = 'none';
+            othersInput.required = false;
+            othersInput.value = '';
+        }
+    });
+});
+
+// ── Final form-level guard before submit ──
+document.getElementById('applicantForm').addEventListener('submit', function(e) {
+    let hasError = false;
+
+    if (emailInput.value.trim() !== '' && !emailPattern.test(emailInput.value.trim())) {
+        emailError.style.display = 'block';
+        emailInput.style.borderColor = '#ef4444';
+        hasError = true;
+    }
+
+    if (contactInput.value.length !== 11) {
+        contactError.style.display = 'block';
+        contactInput.style.borderColor = '#ef4444';
+        hasError = true;
+    }
+
+    if (hasError) {
+        e.preventDefault();
+        alert('Please fix the highlighted fields before submitting.');
+    }
 });
 </script>
 
