@@ -1,5 +1,5 @@
 <?php
-// fetch_beneficiary_details.php
+// fetch_beneficiary_details.php ret
 require_once 'auth.php'; 
 
 require_once(__DIR__ . '/../db.php');
