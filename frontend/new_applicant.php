@@ -275,7 +275,7 @@ require_once 'auth.php';?>
                 <div class="form-section-title" style="color: #3b82f6;">Medical Cause</div>
                 <div class="analysis-grid">
                     <?php 
-                    $causes = ["Medical Checkup", "Emergency Treatment", "Chemotherapy", "Surgery", "Guarantee Letter", "Hospitalization", "Laboratory Tests", "Accident Injury", "Dialysis"];
+                    $causes = ["Medical Checkup", "Emergency Treatment", "Chemotherapy", "Surgery", "Hospitalization", "Laboratory Tests", "Accident Injury", "Dialysis"];
                     foreach($causes as $c): ?>
                         <label class="option-item">
                             <input type="radio" name="medical_cause" value="<?php echo $c; ?>" required> <?php echo $c; ?>

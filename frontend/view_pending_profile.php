@@ -480,7 +480,7 @@ $brgy_list = ["Alicia","Amihan","Apolonio Samson","Aurora","Baesa","Bagbag","Bag
                 <div class="value green view-val" data-field="assistance_type"><?php echo htmlspecialchars($row['assistance_type'] ?? '—'); ?></div>
                 <select class="edit-input" data-field="assistance_type">
                     <option value="">— Select —</option>
-                    <?php foreach (["Medical Assistance","Cash Guarantee","Surgery Financial Support","Laboratory Assistance","Dialysis Assistance","Medicine Assistance","Food Assistance","Funeral Assistance","Education Assistance","Transportation Assistance"] as $a): ?>
+                    <?php foreach (["Medical Assistance","Cash", "Guarantee Letter","Surgery Financial Support","Laboratory Assistance","Dialysis Assistance","Medicine Assistance","Food Assistance","Funeral Assistance","Education Assistance","Transportation Assistance"] as $a): ?>
                         <option value="<?php echo htmlspecialchars($a); ?>" <?php echo (($row['assistance_type'] ?? '') === $a) ? 'selected' : ''; ?>><?php echo htmlspecialchars($a); ?></option>
                     <?php endforeach; ?>
                     <option value="Others" <?php echo (!in_array($row['assistance_type'] ?? '', ["Medical Assistance","Cash Guarantee","Surgery Financial Support","Laboratory Assistance","Dialysis Assistance","Medicine Assistance","Food Assistance","Funeral Assistance","Education Assistance","Transportation Assistance"]) && !empty($row['assistance_type'])) ? 'selected' : ''; ?>>Others</option>
