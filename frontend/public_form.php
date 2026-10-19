@@ -607,7 +607,7 @@ if (isset($errMessages[$err])):
                 </label>
                 <div class="check-grid">
                     <?php
-                    $assists = ["Medical Assistance","Cash Guarantee","Surgery Financial Support",
+                    $assists = ["Medical Assistance","Cash","Surgery Financial Support", "Guarantee Letter", 
                                 "Laboratory Assistance","Dialysis Assistance","Medicine Assistance",
                                 "Food Assistance","Funeral Assistance","Education Assistance","Transportation Assistance"];
                     foreach ($assists as $a):
