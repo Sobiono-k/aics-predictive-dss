@@ -75,6 +75,30 @@ while ($row = $causeRes->fetch_assoc()) {
     $medicalCauses[] = $row;
 }
 
+// NEW: #1 medical cause (list is already sorted by count DESC)
+$topCause = $medicalCauses[0] ?? null;
+$totalMedical = array_sum(array_column($medicalCauses, 'count'));
+$topCausePct = ($topCause && $totalMedical > 0)
+    ? round($topCause['count'] / $totalMedical * 100, 1) : 0;
+
+// =========================
+// NEW: BENEFICIARIES PER ASSISTANCE CATEGORY (APPROVED ONLY)
+// =========================
+$beneficiaries = [];
+$benRes = $conn->query("SELECT assistance_type, COUNT(*) AS total
+                        FROM aics_sample_data
+                        WHERE LOWER(status) = 'approved'
+                        GROUP BY assistance_type
+                        ORDER BY total DESC");
+if ($benRes) {
+    while ($row = $benRes->fetch_assoc()) {
+        $beneficiaries[] = $row;
+    }
+}
+$totalBeneficiaries = array_sum(array_column($beneficiaries, 'total'));
+$benLabelsJson = json_encode(array_column($beneficiaries, 'assistance_type') ?: []);
+$benCountsJson = json_encode(array_map('intval', array_column($beneficiaries, 'total')) ?: []);
+
 // =========================
 // SAFE JSON ENCODING (budget/cause charts — unchanged)
 // =========================
@@ -452,6 +476,13 @@ $conn->close();
 
         .export-row { display:flex; gap:12px; flex-wrap:wrap; }
 
+        /* NEW: #1 medical cause highlight card */
+        .highlight-card { background: linear-gradient(135deg, #0038a8, #1d4ed8); color: #fff; border-radius: 12px; padding: 24px 28px; margin-bottom: 20px; box-shadow: var(--card-shadow); display: flex; align-items: center; gap: 20px; }
+        .highlight-card i { font-size: 34px; background: rgba(255,255,255,.15); padding: 16px; border-radius: 12px; }
+        .highlight-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .8; font-weight: 700; }
+        .highlight-name { font-size: 24px; font-weight: 800; margin: 4px 0; }
+        .highlight-sub { font-size: 13px; opacity: .9; }
+
         @media print {
             .sidebar, .report-grid, .pool-row, .btn, .no-print { display: none !important; }
             .main { margin: 0; padding: 0; width: 100%; }
@@ -504,7 +535,21 @@ $conn->close();
         </div>
     </div>
 
-    <!-- BUDGET / MEDICAL CHARTS — unchanged -->
+    <!-- NEW: #1 MEDICAL CAUSE HIGHLIGHT -->
+    <?php if ($topCause): ?>
+    <div id="topCauseCard" class="highlight-card">
+        <i class="fas fa-trophy"></i>
+        <div>
+            <div class="highlight-label">#1 Medical Cause</div>
+            <div class="highlight-name"><?php echo htmlspecialchars($topCause['medical_cause']); ?></div>
+            <div class="highlight-sub">
+                <?php echo number_format($topCause['count']); ?> cases · <?php echo $topCausePct; ?>% of the top 10 causes
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- BUDGET / MEDICAL CHARTS -->
     <div class="chart-container">
         <div class="section-box">
             <h3 style="margin-top:0; font-size:14px; text-transform: uppercase; color: #64748b; margin-bottom: 15px;">Demand Distribution (%)</h3>
@@ -559,6 +604,48 @@ $conn->close();
                 <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
+
+    <!-- NEW: BENEFICIARIES PER ASSISTANCE CATEGORY (APPROVED ONLY) -->
+    <div id="beneficiarySection" class="section-box">
+        <div class="section-title-row">
+            <div>
+                <h2>Beneficiaries per Assistance Category</h2>
+                <div class="section-subtitle">Approved requests only</div>
+            </div>
+            <div style="font-weight:800; color:var(--dswd-blue); font-size:20px;">
+                <?php echo number_format($totalBeneficiaries); ?> total
+            </div>
+        </div>
+
+        <div class="chart-container" style="grid-template-columns: 1fr 1fr; margin-bottom:0;">
+            <div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Beneficiaries</th>
+                            <th>Share</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($beneficiaries as $b): ?>
+                        <tr>
+                            <td style="font-weight:600;"><?php echo htmlspecialchars($b['assistance_type']); ?></td>
+                            <td><?php echo number_format($b['total']); ?></td>
+                            <td><?php echo $totalBeneficiaries ? round($b['total'] / $totalBeneficiaries * 100, 1) : 0; ?>%</td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($beneficiaries)): ?>
+                        <tr><td colspan="3" style="color:#94a3b8;">No approved records yet.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="beneficiaryChart"></canvas>
+            </div>
+        </div>
     </div>
 
     <!-- =========================
@@ -662,6 +749,10 @@ const budgetData = <?php echo $chartData ?: '[]'; ?>;
 const causeLabels = <?php echo $medicalLabels ?: '[]'; ?>;
 const causeData = <?php echo $medicalCounts ?: '[]'; ?>;
 
+// NEW: approved beneficiaries per category
+const benLabels = <?php echo $benLabelsJson ?: '[]'; ?>;
+const benCounts = <?php echo $benCountsJson ?: '[]'; ?>;
+
 const outcomeLabels = <?php echo $outcomeLabelsJson ?: '[]'; ?>;
 const outcomeCounts = <?php echo $outcomeCountsJson ?: '[]'; ?>;
 const trendLabels = <?php echo $trendLabelsJson ?: '[]'; ?>;
@@ -677,8 +768,8 @@ let currentGrain = 'monthly';
 function showSection(type) {
     let targetId = 'budgetSection';
     if (type === 'model') targetId = 'modelSection';
-    if (type === 'medical') targetId = 'budgetSection';
-    const section = document.getElementById(targetId);
+    if (type === 'medical') targetId = 'topCauseCard';
+    const section = document.getElementById(targetId) || document.getElementById('budgetSection');
     if (section) section.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -699,17 +790,33 @@ if (budgetCanvas && budgetLabels.length > 0) {
     });
 }
 
-// ── Medical cause bar (unchanged) ───────────────────────────────
+// ── Medical cause bar (top cause now highlighted in red) ────────
 const causeCanvas = document.getElementById('causeChart');
 if (causeCanvas && causeLabels.length > 0) {
     new Chart(causeCanvas.getContext('2d'), {
         type: 'bar',
         data: { labels: causeLabels, datasets: [{ label: 'Cases Reported', data: causeData,
-            backgroundColor: '#0038a8', borderRadius: 6, borderSkipped: false, barThickness: 18 }] },
+            backgroundColor: causeLabels.map((_, i) => i === 0 ? '#ce1126' : '#0038a8'),
+            borderRadius: 6, borderSkipped: false, barThickness: 18 }] },
         options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
             animation: { duration: 2000, easing: 'easeOutQuart' },
             plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0f172a', titleFont: { size: 13 }, bodyFont: { size: 12 } } },
             scales: { x: { grid: { color: '#e2e8f0' }, ticks: { precision: 0 } }, y: { grid: { display: false } } } }
+    });
+}
+
+// ── NEW: Approved beneficiaries per assistance category ─────────
+const benCanvas = document.getElementById('beneficiaryChart');
+if (benCanvas && benLabels.length > 0) {
+    new Chart(benCanvas.getContext('2d'), {
+        type: 'bar',
+        data: { labels: benLabels, datasets: [{ label: 'Approved Beneficiaries', data: benCounts,
+            backgroundColor: '#10b981', borderRadius: 6, borderSkipped: false }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            animation: { duration: 1800, easing: 'easeOutQuart' },
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#e2e8f0' } },
+                      x: { grid: { display: false } } } }
     });
 }
 
