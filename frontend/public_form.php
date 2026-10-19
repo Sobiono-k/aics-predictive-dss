@@ -581,7 +581,7 @@ if (isset($errMessages[$err])):
                 </label>
                 <div class="check-grid">
                     <?php
-                    $causes = ["Medical Checkup","Emergency Treatment","Maternity Care","Chemotherapy",
+                    $causes = ["Medical Checkup","Emergency Treatment","Chemotherapy",
                                "Surgery","Hospitalization","Laboratory Tests","Accident Injury","Dialysis"];
                     foreach ($causes as $c):
                     ?>
