@@ -102,6 +102,7 @@ function pgUrl($p) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="<?php echo defined('BASE_URL') ? BASE_URL : '../'; ?>images/dswdlogo2.png">
     <title>Pending Applicants</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -348,7 +349,7 @@ function pgUrl($p) {
                         <th style="width:22%;">Full Name</th>
                         <th style="width:16%;">Date of Birth</th>
                         <th style="width:15%;">Barangay</th>
-                        <th style="width:15%;">Medical Cause</th>
+                        <th style="width:15%;">Assistance Category</th>
                         <th style="width:14%;">Submitted</th>
                         <th style="width:10%; text-align:center;">Actions</th>
                     </tr>

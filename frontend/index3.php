@@ -88,7 +88,7 @@ if ($lstmResults === null || empty($lstmResults)) {
 <head>
     <meta charset="UTF-8">
     <title>Medical Pattern Intelligence Dashboard</title>
-    <link rel="icon" type="image/png" href="<?php echo BASE_URL; ?>images/dswdlogo2.png">
+    <link rel="icon" type="image/png" href="<?php echo defined('BASE_URL') ? BASE_URL : '../'; ?>images/dswdlogo2.png">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
