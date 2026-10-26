@@ -1,5 +1,9 @@
 <?php
 // public_form.php — Public-facing AICS Online Application Form
+
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 // No login required. Submits to submit_public_form.php
 ?>
 <!DOCTYPE html>
@@ -8,7 +12,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Online Application Form</title>
-    <link rel="icon" type="image/png" href="<?php echo BASE_URL; ?>images/dswdlogo2.png">
+    <link rel="icon" type="image/png" href="<?php echo defined('BASE_URL') ? BASE_URL : '../'; ?>images/dswdlogo2.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
