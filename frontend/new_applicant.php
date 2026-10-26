@@ -272,27 +272,17 @@ require_once 'auth.php';?>
                     <div class="col"><label>Diagnosis</label><input type="text" name="diagnosis"></div>
                 </div>
 
-                <div class="form-section-title" style="color: #3b82f6;">Medical Cause</div>
-                <div class="analysis-grid">
-                    <?php 
-                    $causes = ["Medical Checkup", "Emergency Treatment", "Chemotherapy", "Surgery", "Hospitalization", "Laboratory Tests", "Accident Injury", "Dialysis"];
-                    foreach($causes as $c): ?>
-                        <label class="option-item">
-                            <input type="radio" name="medical_cause" value="<?php echo $c; ?>" required> <?php echo $c; ?>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
 
-                <div class="form-section-title" style="color: #10b981;">Type of Assistance Requested</div>
-                <div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
-                    <?php 
-                    $types = ["Medical Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medicine Assistance", "Hospital Bill Assistance"];
-                    foreach($types as $t): ?>
-                        <label class="option-item">
-                            <input type="radio" name="assistance_type" value="<?php echo $t; ?>" required> <?php echo $t; ?>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
+                <div class="form-section-title" style="color: #10b981;">Assistance Category</div>
+<div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
+    <?php
+    $assistance_categories = ["Medicine", "Hospital Bill", "Laboratory / Diagnostic Tests", "Dialysis", "Chemotherapy", "Surgery", "Emergency / Accident Treatment", "Medical Checkup / Consultation", "Others"];
+    foreach($assistance_categories as $a): ?>
+        <label class="option-item">
+            <input type="radio" name="assistance_type" value="<?php echo $a; ?>" required> <?php echo $a; ?>
+        </label>
+    <?php endforeach; ?>
+</div>
 
                 <button type="submit" class="btn-submit">SYNC DATA & REGISTER APPLICANT</button>
             </form>

@@ -565,46 +565,7 @@ $conn->close();
         </div>
     </div>
 
-    <!-- BUDGET ALLOCATION SECTION — unchanged -->
-    <div id="budgetSection" class="section-box">
-        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-            <h2 style="margin:0; font-size:18px; color: var(--dswd-dark);">Fund Allocation Summary</h2>
-            <div class="pool-row no-print">
-                <form method="GET" style="display:flex; align-items:center; gap:10px;">
-                    <span style="font-size:12px; font-weight:600;">Fund Pool (PHP):</span>
-                    <input type="number" name="pool" class="pool-input" value="<?php echo $totalBudgetPool; ?>">
-                    <button type="submit" class="btn btn-blue">Update</button>
-                    <button type="button" class="btn btn-dark" onclick="window.print()"><i class="fas fa-print"></i> Print Official</button>
-                </form>
-            </div>
-        </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Demand Intensity</th>
-                    <th>Suggested Allocation</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($allocations as $item): ?>
-                <tr>
-                    <td style="font-weight:600;"><?php echo htmlspecialchars($item['type']); ?></td>
-                    <td style="width: 300px;">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <div style="flex:1; background:#f1f5f9; height:10px; border-radius:5px; overflow:hidden;">
-                                <div style="width:<?php echo $item['percent']; ?>%; background:var(--dswd-blue); height:100%;"></div>
-                            </div>
-                            <span style="font-weight:700; font-size:12px;"><?php echo $item['percent']; ?>%</span>
-                        </div>
-                    </td>
-                    <td style="color:var(--success); font-weight:700;">₱<?php echo number_format($item['amount'], 2); ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
 
     <!-- NEW: BENEFICIARIES PER ASSISTANCE CATEGORY (APPROVED ONLY) -->
     <div id="beneficiarySection" class="section-box">
