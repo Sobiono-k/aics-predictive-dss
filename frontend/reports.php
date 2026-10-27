@@ -634,18 +634,10 @@ $conn->close();
                     <canvas id="outcomeChart"></canvas>
                 </div>
             </div>
-            <div>
-                <h3 style="font-size:12px; text-transform: uppercase; color: #64748b; margin-bottom: 15px;">Recent Trend (Requests / Day, last 7 days)</h3>
-                <div class="chart-wrapper" style="height:240px;">
-                    <canvas id="trendChart"></canvas>
-                </div>
-            </div>
         </div>
 
 
         <!-- Top Factors (SHAP) — live model only, honest empty state otherwise -->
-        <h3 style="font-size:14px; text-transform: uppercase; color: #64748b; margin: 25px 0 15px;">Top Factors (Feature Contributions)</h3>
-        <div id="topFactorsContainer"></div>
 
         <!-- Data Drift — honest placeholder, no fabricated numbers -->
 
@@ -804,8 +796,6 @@ function renderDiagnostics(grain) {
     const m = (GRAINS[grain] && GRAINS[grain].metrics) || {};
     const cards = [
         { label:'MAE', val: (m.mae ?? 0).toLocaleString(), sub:'Mean Absolute Error', cls:'mae' },
-        { label:'RMSE', val: (m.rmse ?? 0).toLocaleString(), sub:'Root Mean Squared Error', cls:'rmse' },
-        { label:'Bias', val: (m.bias > 0 ? '+' : '') + (m.bias ?? 0).toLocaleString(), sub: m.bias > 0 ? 'Model over-predicts' : (m.bias < 0 ? 'Model under-predicts' : 'No systematic bias'), cls:'bias' },
         { label:'95% Margin', val: '± ' + (m.margin_of_error_95 ?? 0).toLocaleString(), sub:'Forecast uncertainty envelope', cls:'margin' },
     ];
     document.getElementById('diagGrid').innerHTML = cards.map(c => `
