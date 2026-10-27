@@ -505,13 +505,6 @@ $conn->close();
     </div>
 
     <div class="report-grid no-print">
-        <div class="report-card" onclick="showSection('budget')">
-            <i class="fas fa-chart-pie"></i>
-            <div>
-                <h3>Budget Allocation</h3>
-                <p>Expenditure vs. Pool</p>
-            </div>
-        </div>
         <div class="report-card" onclick="showSection('medical')">
             <i class="fas fa-notes-medical"></i>
             <div>
@@ -633,22 +626,7 @@ $conn->close();
         <div class="metric-grid" id="diagGrid"></div>
 
         <!-- Prediction Summaries (real DB counts) -->
-        <h3 style="font-size:14px; text-transform: uppercase; color: #64748b; margin-bottom: 15px;">Request Volume Summaries</h3>
-        <div class="volume-row">
-            <div class="volume-pill">
-                <div class="volume-value"><?php echo number_format($predictionVolume['today']); ?></div>
-                <div class="volume-label">Today</div>
-            </div>
-            <div class="volume-pill">
-                <div class="volume-value"><?php echo number_format($predictionVolume['week']); ?></div>
-                <div class="volume-label">This Week</div>
-            </div>
-            <div class="volume-pill">
-                <div class="volume-value"><?php echo number_format($predictionVolume['month']); ?></div>
-                <div class="volume-label">This Month</div>
-            </div>
-        </div>
-
+        
         <div class="chart-container" style="grid-template-columns: 1fr 1fr;">
             <div>
                 <h3 style="font-size:12px; text-transform: uppercase; color: #64748b; margin-bottom: 15px;">Outcome Breakdown (Approved vs Pending)</h3>
@@ -664,27 +642,12 @@ $conn->close();
             </div>
         </div>
 
-        <!-- Top Predicted Assistance Types + Hotspots (real) -->
-        <div class="chart-container" style="grid-template-columns: 1fr 1fr; margin-top:10px;">
-            <div>
-                <h3 style="font-size:14px; text-transform: uppercase; color: #64748b; margin-bottom: 15px;">Top Predicted Assistance Types</h3>
-                <div id="typeBreakdown"></div>
-            </div>
-            <div>
-                <h3 style="font-size:14px; text-transform: uppercase; color: #64748b; margin-bottom: 15px;">Rising Categories / Hotspots</h3>
-                <div id="hotspotBreakdown"></div>
-            </div>
-        </div>
 
         <!-- Top Factors (SHAP) — live model only, honest empty state otherwise -->
         <h3 style="font-size:14px; text-transform: uppercase; color: #64748b; margin: 25px 0 15px;">Top Factors (Feature Contributions)</h3>
         <div id="topFactorsContainer"></div>
 
         <!-- Data Drift — honest placeholder, no fabricated numbers -->
-        
-        <!-- Narrative -->
-        <h3 style="font-size:14px; text-transform: uppercase; color: #64748b; margin: 25px 0 15px;">Narrative Insight</h3>
-        <div id="narrativeBox" class="narrative-box"></div>
 
         <!-- Export -->
         <h3 style="font-size:14px; text-transform: uppercase; color: #64748b; margin: 25px 0 15px;">Export & History</h3>
