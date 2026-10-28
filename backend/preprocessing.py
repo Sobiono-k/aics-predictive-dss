@@ -31,8 +31,20 @@ def get_engine():
 # =========================================================
 
 def load_csv_data():
+    """
+    Loads AICS records directly from the Aiven MySQL database engine,
+    with a fallback to the local CSV if database connection fails.
+    """
     try:
-        # Resolve path relative to this script's location
+        # Attempt to load directly from Aiven MySQL Database table
+        query = "SELECT * FROM aics_sample_data"
+        df = pd.read_sql(query, con=_engine)
+        print("Successfully loaded data from Aiven MySQL database!")
+        
+    except Exception as db_err:
+        print(f"Database connection failed: {db_err}. Falling back to local CSV...")
+        
+        # Fallback to local CSV if database is unreachable
         script_dir = os.path.dirname(os.path.abspath(__file__))
         csv_path = os.path.join(script_dir, 'aics_sample_data.csv')
 
@@ -40,12 +52,11 @@ def load_csv_data():
             print(f"CSV file not found at: {csv_path}")
             return pd.DataFrame()
 
-        # Load CSV with auto-delimiter detection and comment skipping
         read_kwargs = {
-            'sep': None,            # Auto-detect comma, semicolon, or tab
-            'engine': 'python',     # Required for sep=None
-            'comment': '#',         # Skip phpMyAdmin header comments
-            'on_bad_lines': 'skip'  # Skip stray malformed metadata lines
+            'sep': None,
+            'engine': 'python',
+            'comment': '#',
+            'on_bad_lines': 'skip'
         }
 
         try:
@@ -53,84 +64,49 @@ def load_csv_data():
         except (UnicodeDecodeError, Exception):
             df = pd.read_csv(csv_path, encoding='latin1', **read_kwargs)
 
-        # -------------------------------------------------
-        # CLEAN COLUMN HEADERS & DEBUG PRINT
-        # -------------------------------------------------
-        # Clean quotes and whitespace from headers
-        df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", "")
-        print("CSV Columns Found:", list(df.columns))
+    # -------------------------------------------------
+    # COMMON CLEANING PIPELINE (Applies to both DB & CSV)
+    # -------------------------------------------------
+    if df.empty:
+        print("Dataset is empty.")
+        return pd.DataFrame()
 
-        # -------------------------------------------------
-        # EMPTY DATASET CHECK
-        # -------------------------------------------------
-        if df.empty:
-            print("Dataset is empty.")
-            return pd.DataFrame()
+    # Clean quotes and whitespace from headers
+    df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", "")
+    
+    # Find date column dynamically
+    actual_date_col = None
+    for col in df.columns:
+        col_str = str(col).lower()
+        if 'request_date' in col_str or 'date' in col_str:
+            actual_date_col = col
+            break
 
-        # -------------------------------------------------
-        # FIND DATE COLUMN
-        # -------------------------------------------------
-        actual_date_col = None
+    if actual_date_col is None:
+        print("No request_date column found.")
+        return pd.DataFrame()
 
-        for col in df.columns:
-            col_str = str(col).lower()
-            if 'request_date' in col_str or 'date' in col_str:
-                actual_date_col = col
-                break
+    df = df.rename(columns={actual_date_col: 'request_date'})
 
-        if actual_date_col is None:
-            print("No request_date column found.")
-            return pd.DataFrame()
+    # Parse dates safely
+    df['request_date'] = pd.to_datetime(df['request_date'], errors='coerce')
+    df = df.dropna(subset=['request_date'])
 
-        # Rename column consistently
-        df = df.rename(columns={
-            actual_date_col: 'request_date'
-        })
+    # Keep only realistic years
+    df = df[
+        (df['request_date'].dt.year >= 2022) &
+        (df['request_date'].dt.year <= 2030)
+    ]
 
-        # -------------------------------------------------
-        # PARSE DATES SAFELY
-        # -------------------------------------------------
-        df['request_date'] = pd.to_datetime(
-            df['request_date'],
-            errors='coerce'
-        )
+    # Clean optional columns
+    optional_columns = ['medical_cause', 'assistance_type']
+    for col in optional_columns:
+        if col not in df.columns:
+            df[col] = 'Unknown'
+        df[col] = df[col].fillna('Unknown')
 
-        # Remove invalid dates
-        df = df.dropna(subset=['request_date'])
-
-        # -------------------------------------------------
-        # KEEP ONLY REALISTIC YEARS
-        # -------------------------------------------------
-        df = df[
-            (df['request_date'].dt.year >= 2022) &
-            (df['request_date'].dt.year <= 2030)
-        ]
-
-        # -------------------------------------------------
-        # CLEAN OPTIONAL COLUMNS
-        # -------------------------------------------------
-        optional_columns = [
-            'medical_cause',
-            'assistance_type'
-        ]
-
-        for col in optional_columns:
-            if col not in df.columns:
-                df[col] = 'Unknown'
-
-            df[col] = df[col].fillna('Unknown')
-
-        # -------------------------------------------------
-        # SORT DATA
-        # -------------------------------------------------
-        df = df.sort_values('request_date')
-
-        return df
-
-    except Exception as e:
-        print(f"CSV Loading Error: {e}")
-        print(traceback.format_exc())
-        raise RuntimeError(f"load_csv_data failed: {e}")
+    df = df.sort_values('request_date')
+    return df
 
 # =========================================================
 # CREATE TIME SERIES

@@ -84,21 +84,18 @@ def nullpad(lst, n_before):
 # ─────────────────────────────────────────────────────────────────
 
 def load_base_series():
-    """
-    Load CSV, parse dates, return daily DatetimeIndex Series strictly
-    filtered from September 1, 2022 through May 31, 2026.
-    """
     df = load_csv_data()
 
     if 'request_date' not in df.columns:
-        raise ValueError(
-            f"'request_date' column missing. Actual columns: {df.columns.tolist()}."
-        )
+        raise ValueError(f"'request_date' column missing.")
 
     df['request_date'] = pd.to_datetime(df['request_date'])
 
-    # Explicit date filtering: Sep 2022 to May 2026
-    df = df[(df['request_date'] >= '2022-09-01') & (df['request_date'] <= '2026-05-31')]
+    # ✅ Dynamic filter: starts from September 2022 up to the maximum date present in your dataset (or today)
+    max_date = df['request_date'].max()
+    print(f"Dataset date range loaded: {df['request_date'].min().strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}")
+
+    df = df[(df['request_date'] >= '2022-09-01') & (df['request_date'] <= max_date)]
 
     daily = (df.groupby(pd.Grouper(key='request_date', freq='D'))
                .size()
