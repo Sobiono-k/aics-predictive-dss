@@ -434,7 +434,7 @@ const GRAINS = {
 const RF_DATA = <?php echo json_encode($rfData ?? ['weekly'=>['predictions'=>[],'hotspots'=>[]],'monthly'=>['predictions'=>[],'hotspots'=>[]],'yearly'=>['predictions'=>[],'hotspots'=>[]]], JSON_UNESCAPED_UNICODE); ?>;
 
 const GRAIN_META = {
-    weekly:  { title: 'Weekly Client Volume — 2022 to Forecast',  forecast: 'Forecast: remaining months of the year', xLimit: 15, rfTitle: 'Top Medical Assistance Prediction (Weekly Distribution)',  hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
+    weekly:  { title: 'Weekly Client Volume — 2022 to Forecast',  forecast: 'Forecast: remaining months of the year', xLimit: 15, rfTitle: 'Top Medical Causes Prediction (Weekly Distribution)',  hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
     monthly: { title: 'Monthly Client Volume — 2022 to Forecast', forecast: 'Forecast: 12-month Outlook',  xLimit: 20, rfTitle: 'Top Medical Assistance Prediction (Monthly Aggregate)',     hotspotTitle: 'Rising Medical Causes & Hotspots (Monthly Velocity Acceleration)' },
     yearly:  { title: 'Yearly Client Volume — 2022 to Forecast',  forecast: 'Forecast: 5-year outlook',           xLimit: 10, rfTitle: 'Top Medical Assistance Prediction (Yearly Projections)',   hotspotTitle: 'Rising Medical Causes & Hotspots (Yearly Structural Shifts)' },
 };
