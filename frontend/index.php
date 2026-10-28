@@ -227,8 +227,9 @@ $total_requests = $conn->query("SELECT COUNT(*) as t FROM aics_sample_data")->fe
 $pending_count = $approved_count = 0;
 $sd = $conn->query("SELECT `$status_col` as s, COUNT(*) as q FROM aics_sample_data GROUP BY `$status_col`");
 if ($sd) while ($r = $sd->fetch_assoc()) {
-    if (strtolower($r['s']) === 'pending')  $pending_count  = $r['q'];
-    if (strtolower($r['s']) === 'approved') $approved_count = $r['q'];
+    $status_val = strtolower((string)($r['s'] ?? ''));
+    if ($status_val === 'pending')  $pending_count  = $r['q'];
+    if ($status_val === 'approved') $approved_count = $r['q'];
 }
 
 $top_3_assistance = [];
