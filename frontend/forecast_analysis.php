@@ -389,10 +389,10 @@ $conn->close();
         <div class="lstm-panel" style="display:flex;flex-direction:column;gap:20px;">
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
                 <div>
-                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#344767;" id="rfCardTitle">Top Medical Assistance Prediction (Weekly)</h3>
+                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#344767;" id="rfCardTitle">Top Medical Causes Prediction (Weekly)</h3>
                     <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">Random Forest classification results based on historical AICS assistance records</p>
                 </div>
-                <div style="background:#eef2ff;color:#6366f1;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #c7d2fe;font-family:monospace;font-weight:600;">Random Forest AI</div>
+                <div style="background:#eef2ff;color:#6366f1;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #c7d2fe;font-family:monospace;font-weight:600;">Random Forest</div>
             </div>
             <div class="lstm-panel-dark"><div style="height:256px;position:relative;"><canvas id="rfChart"></canvas></div></div>
             <div id="rfPredictions" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
@@ -408,7 +408,7 @@ $conn->close();
                     <h3 style="margin:0;font-size:18px;font-weight:700;color:#ef4444;display:flex;align-items:center;gap:8px;" id="hotspotsCardTitle"><span></span> Rising Medical Causes (Hotspots)</h3>
                     <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">High-velocity growth anomalies identified across specific diagnostics requiring proactive resource staging</p>
                 </div>
-                <div style="background:#fff1f2;color:#f43f5e;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #fecdd3;font-family:monospace;font-weight:600;">Anomaly Outbreak Alert</div>
+                <div style="background:#fff1f2;color:#f43f5e;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #fecdd3;font-family:monospace;font-weight:600;">Outbreak Alert</div>
             </div>
             <div class="lstm-panel-dark"><div style="height:256px;position:relative;"><canvas id="hotspotChart"></canvas></div></div>
             <div id="hotspotContainers" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
