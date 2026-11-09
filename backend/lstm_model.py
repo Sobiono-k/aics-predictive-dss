@@ -369,44 +369,39 @@ def run_grain(
         mx
     )
 
+    
     # -----------------------------------------------------
     # CONFIDENCE INTERVAL ESTIMATION
     # -----------------------------------------------------
 
-    residuals = y - fitted_normalized
+    # Calculate residuals in the original request-count scale,
+    #    not in normalized log space.
+    residuals_count = actual_for_metrics - fitted_values
 
-    residual_std = (
-        float(np.std(residuals, ddof=1))
-        if len(residuals) > 1
-        else 0.0
+    residual_std_count = (
+    float(np.std(residuals_count, ddof=1))
+    if len(residuals_count) > 1
+    else 0.0
     )
 
-    steps_ahead = np.arange(
-        1,
-        total_steps + 1
+    steps_ahead = np.arange(1, total_steps + 1)
+
+    # Approximate prediction uncertainty in request counts.
+    margin = (
+    1.96
+    * residual_std_count
+    * np.sqrt(steps_ahead)
     )
 
-    lower_normalized = (
-    all_future_normalized
-    - 1.96 * residual_std * np.sqrt(steps_ahead)
+    all_future_lower = np.maximum(
+    0,
+    all_future_values - margin
     )
 
-    upper_normalized = (
-    all_future_normalized
-    + 1.96 * residual_std * np.sqrt(steps_ahead)
+    all_future_upper = (
+    all_future_values + margin
     )
 
-    all_future_lower = unscale(
-        lower_normalized,
-        mn,
-        mx
-    )
-
-    all_future_upper = unscale(
-        upper_normalized,
-        mn,
-        mx
-    )
 
     # -----------------------------------------------------
     # LABELS AND OUTPUT ALIGNMENT
@@ -495,7 +490,10 @@ def run_grain(
 
         "metrics": {
             "mae": safe_round(mae),
-            "rmse": safe_round(rmse)
+            "rmse": safe_round(rmse),
+            "margin_of_error_95": safe_round(
+                1.96 * residual_std_count
+            )
         },
 
         "forecast_info": {
