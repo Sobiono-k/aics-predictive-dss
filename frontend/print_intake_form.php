@@ -1,6 +1,8 @@
 <?php
 // print_intake_form.php
 // Blank printable GENERAL INTAKE SHEET — opened from new_applicant.php PRINT button
+date_default_timezone_set('Asia/Manila');
+
 session_start();
 if (!isset($_SESSION['role'])) {
     header("Location: login.php");
@@ -119,6 +121,46 @@ $year    = date('Y');
             display: inline-block;
         }
 
+        /* ── Header Intake Classification Grid ── */
+        .intake-class-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1.2fr 2fr;
+            border-bottom: 2.5px solid #000;
+            background: #fff;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .intake-class-grid > div {
+            padding: 10px 14px;
+            border-right: 1.5px solid #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 6px;
+        }
+        .intake-class-grid > div:last-child {
+            border-right: none;
+        }
+        .intake-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .date-box-wrap {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .date-box {
+            border: 1px solid #000;
+            height: 22px;
+            text-align: center;
+            font-size: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         /* ── Section title ── */
         .section-title {
             background: var(--navy);
@@ -187,14 +229,14 @@ $year    = date('Y');
         }
         .check-box {
             width: 14px; height: 14px;
-            border: 1.5px solid #94a3b8;
-            border-radius: 3px;
+            border: 1.5px solid #000;
+            border-radius: 2px;
             flex-shrink: 0;
             display: inline-block;
         }
         .circle-box {
             width: 14px; height: 14px;
-            border: 1.5px solid #94a3b8;
+            border: 1.5px solid #000;
             border-radius: 50%;
             flex-shrink: 0;
             display: inline-block;
@@ -289,7 +331,7 @@ $year    = date('Y');
             <div>
                 <h1>Department of Social Welfare and Development</h1>
                 <p>AICS — ASSISTANCE TO INDIVIDUALS IN CRISIS SITUATION</p>
-                <p>Batasan Hills Branch &nbsp;|&nbsp; Quezon City</p>
+                <p>Batasan Hills &nbsp;|&nbsp; Quezon City</p>
             </div>
         </div>
         <div class="right-info">
@@ -309,6 +351,57 @@ $year    = date('Y');
         <div style="text-align:right;">
             <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">Date of Request</div>
             <span class="write-line" style="width:160px;"></span>
+        </div>
+    </div>
+
+    <!-- ── NEW CLASSIFICATION HEADER (FROM IMAGE) ── -->
+    <div class="intake-class-grid">
+        <!-- Col 1: Program -->
+        <div>
+            <div class="intake-row"><span class="check-box"></span> AICS</div>
+            <div class="intake-row"><span class="check-box"></span> AKAP</div>
+            <div class="intake-row" style="margin-top:2px;">
+                <span class="check-box"></span> Others:
+            </div>
+            <div style="border-bottom: 1.5px solid #000; width: 100%; margin-top:2px;"></div>
+        </div>
+
+        <!-- Col 2: Client Type -->
+        <div>
+            <div class="intake-row"><span class="circle-box"></span> New</div>
+            <div class="intake-row" style="margin-top:4px;"><span class="circle-box"></span> Returning</div>
+        </div>
+
+        <!-- Col 3: Location -->
+        <div>
+            <div class="intake-row"><span class="check-box"></span> Onsite</div>
+            <div class="intake-row"><span class="check-box"></span> Malasakit Center</div>
+            <div class="intake-row"><span class="check-box"></span> Offsite</div>
+        </div>
+
+        <!-- Col 4: Intake & Date -->
+        <div style="flex-direction:row; align-items:center; justify-content:space-between;">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <div class="intake-row"><span class="circle-box"></span> Walk-in</div>
+                <div class="intake-row"><span class="circle-box"></span> Referral</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="margin-bottom:4px; font-size:11px;">Date :</div>
+                <div class="date-box-wrap">
+                    <div style="display:flex; flex-direction:column; align-items:center;">
+                        <div class="date-box" style="width:32px;"></div>
+                        <span style="font-size:8px; font-style:italic; font-weight:400; color:#555; margin-top:2px;">MM</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; align-items:center;">
+                        <div class="date-box" style="width:32px;"></div>
+                        <span style="font-size:8px; font-style:italic; font-weight:400; color:#555; margin-top:2px;">DD</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; align-items:center;">
+                        <div class="date-box" style="width:50px;"></div>
+                        <span style="font-size:8px; font-style:italic; font-weight:400; color:#555; margin-top:2px;">YYYY</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -424,38 +517,32 @@ $year    = date('Y');
 
         <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:8px;">Client Subcategory</div>
         <div class="check-grid" style="background:#faf5ff; border-color:#e9d5ff;">
-            <?php
-            $subcategories = [
-                "Individuals with Cancer",
-                "Dialysis Patients",
-                "Chronic Illness / Geriatric Conditions",
-                "Tuberculosis Patients",
-                "Rare Disease / Disability caused by Rare Disease",
-                "Physical Disability / Orthopedically Handicapped",
-                "Visual Disability / Visually Impaired",
-                "Hearing/Speech Impaired",
-                "Psychosocial/Mental/Learning Disability",
-                "Intellectual Disability / Mentally Challenged",
-                "Non-apparent Speech and Language Impairment",
-                "Victims of Disaster",
-                "Internally Displaced Family",
-                "Person of Concerns - Asylum Seeker / Refugee / Stateless Persons",
-                "Physically-abused/maltreated/battered",
-                "Victims of involuntary prostitution",
-                "Recovering Person who used Drugs",
-                "Wounded in Action (WIA)",
-                "Others (specify): ___________________________"
-            ];
-            foreach($subcategories as $sub): ?>
-                <span class="check-item"><span class="circle-box"></span> <?php echo htmlspecialchars($sub); ?></span>
-            <?php endforeach; ?>
+            <?php 
+                    $subcategories = [
+                        "Speech Impairment",
+                        "Psychosocial Disability",
+                        "Learning Disability",
+                        "Cancer",
+                        "Deaf/Hard-of-Hearing",
+                        "Mental Disability",
+                        "Visual Disability",
+                        "Intellectual Disability",
+                        "Physical Disability",
+                        "Rare Disease"
+                    ];
+                    foreach($subcategories as $sub): ?>
+                        <label class="option-item">
+                            <input type="radio" name="medical_cause" value="<?php echo $sub; ?>"
+                                   <?php echo ($sub === 'Others specify') ? 'id="subcat_others_radio"' : ''; ?> required> <?php echo $sub; ?>
+                        </label>
+                    <?php endforeach; ?>
         </div>
     </div>
 
     <hr class="hr">
 
     <!-- ── PART II: ASSISTANCE DETAILS ── -->
-    <div class="section-title red">
+    <div class="section-title">
         <i class="fas fa-hand-holding-medical"></i>
         Part II: Assistance Details
         <span class="sub">— Detalye ng Tulong</span>
@@ -472,119 +559,67 @@ $year    = date('Y');
                 <span class="check-item"><span class="circle-box"></span> ₱<?php echo htmlspecialchars($inc); ?></span>
             <?php endforeach; ?>
         </div>
-
-        <!-- Hospital / Diagnosis -->
-        <div class="info-grid cols-full" style="margin-bottom:18px;">
-            <div class="info-item">
-                <label>DOH Hospital</label>
-                <div class="blank-line"></div>
-            </div>
-        </div>
-        <div class="info-grid cols-full" style="margin-bottom:18px;">
-            <div class="info-item">
-                <label>Diagnosis</label>
-                <div class="blank-line"></div>
-            </div>
-        </div>
-
-        <!-- Medical Cause -->
-        <div style="font-size:10px; font-weight:800; color:#3b82f6; text-transform:uppercase; letter-spacing:.8px; margin-bottom:8px;">Dahilan ng Kahilingan / Medical Cause</div>
-        <div class="check-grid" style="margin-bottom:18px;">
-            <?php
-            $causes = ["Medical Checkup", "Emergency Treatment", "Maternity Care", "Chemotherapy", "Surgery", "Hospitalization", "Laboratory Tests", "Accident Injury", "Dialysis"];
-            foreach($causes as $c): ?>
-                <span class="check-item"><span class="circle-box"></span> <?php echo htmlspecialchars($c); ?></span>
-            <?php endforeach; ?>
-        </div>
+    
 
         <!-- Type of Assistance -->
-        <div style="font-size:10px; font-weight:800; color:#10b981; text-transform:uppercase; letter-spacing:.8px; margin-bottom:8px;">Uri ng Tulong / Type of Assistance Requested</div>
+        <div style="font-size:10px; font-weight:800; color:#10b981; text-transform:uppercase; letter-spacing:.8px; margin-bottom:8px;">Uri ng Tulong / Type of Assistance</div>
         <div class="check-grid" style="background:#f0fdf4; border-color:#10b981; margin-bottom:6px;">
             <?php
-            $types = ["Medical Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medicine Assistance", "Hospital Bill Assistance"];
+            $types = ["Medical Assistance", "Cash Assistance"];
             foreach($types as $t): ?>
                 <span class="check-item"><span class="circle-box"></span> <?php echo htmlspecialchars($t); ?></span>
             <?php endforeach; ?>
         </div>
+    </div>
 
-        <div class="info-grid cols-2" style="margin-top:18px;">
-            <div class="info-item">
-                <label>Uri ng Tulong / Type of Assistance</label>
-                <div class="blank-line"></div>
-            </div>
-            <div class="info-item">
-                <label>Kategorya ng Kliyente / Client Category</label>
-                <div class="blank-line"></div>
-            </div>
+    <hr class="hr">
+
+    <!-- ── PROBLEM PRESENTED ── -->
+    <div class="section-title slate">
+        <i class="fas fa-exclamation-circle"></i>
+        PROBLEM PRESENTED
+    </div>
+
+    <div class="info-body" style="padding-top:16px; padding-bottom:16px;">
+        <div style="border: 1.5px dashed var(--border); border-radius:8px; padding:16px; min-height:80px; background:#fafbff;">
         </div>
     </div>
 
     <hr class="hr">
 
-    <!-- ── FAMILY COMPOSITION ── -->
-    <div class="section-title slate">
-        <i class="fas fa-users"></i>
-        Komposisyon ng Pamilya / Family Composition
-    </div>
-
-    <div class="info-body" style="padding-top:16px; padding-bottom:16px;">
-        <table class="family-table">
-            <thead>
-                <tr>
-                    <th style="width:35%;">Buong Pangalan (Complete Name)</th>
-                    <th style="width:22%;">Relasyon (Relationship)</th>
-                    <th style="width:10%;">Edad (Age)</th>
-                    <th style="width:18%;">Trabaho (Occupation)</th>
-                    <th style="width:15%;">Buwanang Kita (Salary)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php for ($i = 0; $i < 6; $i++): ?>
-                <tr>
-                    <td>&nbsp;</td>
-                    <td></td><td></td><td></td><td></td>
-                </tr>
-                <?php endfor; ?>
-            </tbody>
-        </table>
-    </div>
-
-    <hr class="hr">
-
-    <!-- ── SOCIAL WORKER'S ASSESSMENT (blank) ── -->
-    <div class="section-title red">
+    <!-- ── SOCIAL WORKER'S ASSESSMENT ── -->
+    <div class="section-title">
         <i class="fas fa-clipboard-check"></i>
         Social Worker's Assessment
         <span class="sub">— Para sa DSWD Personnel</span>
     </div>
 
     <div class="info-body">
-        <div style="border: 1.5px dashed var(--border); border-radius:8px; padding:16px; min-height:80px; background:#fafbff;">
-        </div>
-
-        <div class="info-grid cols-2" style="margin-top:18px;">
-            <div class="info-item">
-                <label>Provided</label>
-                <div class="blank-line"></div>
-            </div>
-            <div class="info-item">
-                <label>Amount</label>
-                <div class="blank-line"></div>
-            </div>
-        </div>
-        <div class="info-grid cols-full" style="margin-top:12px;">
-            <div class="info-item">
-                <label>Fund Source</label>
-                <div class="blank-line" style="padding-top:4px;">PSP <?php echo $year; ?></div>
-            </div>
+        <div style="border: 1.5px dashed var(--border); border-radius:8px; padding:16px; min-height:120px; background:#fafbff;">
         </div>
     </div>
 
-    <!-- ── PRIVACY NOTICE ── -->
-    <div style="padding: 14px 28px; background:#f8fafc; border-top: 1px solid var(--border); font-size:10px; color:var(--muted); line-height:1.7;">
-        We are committed to protect and respect the privacy of our clients and beneficiaries and we will only collect, record, store,
-        process and use personal information in accordance with <strong>Republic Act No. 10173 or the Data Privacy Act of 2012.</strong>
-        By signing this form you are giving your consent to the DSWD.
+    <div class="info-body" style="padding-top:0; padding-bottom:16px;">
+        <table class="family-table">
+            <thead>
+                <tr>
+                    <th style="width:8%; text-align:center;">#</th>
+                    <th style="width:52%;">Purpose of Assistance</th>
+                    <th style="width:25%;">Amount</th>
+                    <th style="width:15%;">Fund Source</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php for ($i = 0; $i < 3; $i++): ?>
+                <tr>
+                    <td style="text-align:center;"><?php echo $i + 1; ?></td>
+                    <td>&nbsp;</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <?php endfor; ?>
+            </tbody>
+        </table>
     </div>
 
     <!-- ── SIGNATURE AREA ── -->
@@ -603,7 +638,7 @@ $year    = date('Y');
 
     <!-- Footer -->
     <div class="doc-footer">
-        <span>DSWD Field Office NCR &nbsp;|&nbsp; Batasan Hills Branch &nbsp;|&nbsp; Quezon City</span>
+        <span>DSWD Field Office NCR &nbsp;|&nbsp; Batasan Hills&nbsp;|&nbsp; Quezon City</span>
         <span class="gold">AICS — Online Application System</span>
     </div>
 

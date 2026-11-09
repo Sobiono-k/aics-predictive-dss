@@ -14,7 +14,7 @@ $form_url = "http://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . 
 $qr_api_url = "https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&color=003893&bgcolor=ffffff&data=" . urlencode($form_url);
 
 $current_date = date("F d, Y");
-$branch = "Batasan Hills Branch";
+$branch = "Batasan Hills Quezon City";
 ?>
 <!DOCTYPE html>
 <html lang="fil">

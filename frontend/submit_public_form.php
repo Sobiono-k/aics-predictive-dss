@@ -1,6 +1,6 @@
 <?php
-// submit_public_form.php
-// Receives public_form.php submission, saves to pending_applications, shows reference code
+// submit_public_form.php — Receives public_form.php submission, saves to pending_applications, shows reference code
+date_default_timezone_set('Asia/Manila');
 require_once(__DIR__ . '/../db.php');
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
@@ -8,7 +8,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     exit();
 }
 
-// ── Collect, Sanitize, and Force UPPERCASE ──
+// ── 1. Collect, Sanitize, and Force UPPERCASE ──
 $fname       = strtoupper($conn->real_escape_string(trim($_POST['fname'] ?? '')));
 $mname       = strtoupper($conn->real_escape_string(trim($_POST['mname'] ?? '')));
 $lname       = strtoupper($conn->real_escape_string(trim($_POST['lname'] ?? '')));
@@ -20,13 +20,24 @@ $street      = strtoupper($conn->real_escape_string(trim($_POST['street'] ?? '')
 $mobile      = $conn->real_escape_string(trim($_POST['cp_number'] ?? ''));
 $occupation  = strtoupper($conn->real_escape_string(trim($_POST['occupation'] ?? '')));
 
-// Checkbox fields processed by JS into fields
-$medical_cause   = strtoupper($conn->real_escape_string(trim($_POST['medical_cause'] ?? '')));
-$assistance_type = strtoupper($conn->real_escape_string(trim($_POST['assistance_type'] ?? '')));
-$client_cat      = strtoupper($conn->real_escape_string(trim($_POST['client_category'] ?? '')));
-$client_subcat   = strtoupper($conn->real_escape_string(trim($_POST['client_subcategory'] ?? '')));
+// Classification & Assistance Details
+$program_type    = strtoupper($conn->real_escape_string(trim($_POST['program_type'] ?? 'AICS')));
+$client_nature   = strtoupper($conn->real_escape_string(trim($_POST['client_nature'] ?? 'NEW')));
+$intake_venue    = strtoupper($conn->real_escape_string(trim($_POST['intake_venue'] ?? 'ONSITE')));
+$intake_mode     = strtoupper($conn->real_escape_string(trim($_POST['intake_mode'] ?? 'WALK-IN')));
 
-// Family composition — encode as JSON and Force UPPERCASE inside data array
+$client_cat      = strtoupper($conn->real_escape_string(trim($_POST['client_category'] ?? '')));
+$assistance_type = strtoupper($conn->real_escape_string(trim($_POST['assistance_type'] ?? '')));
+
+// Handling Sub-category mapped directly to medical_cause (including "Others" option)
+$raw_med_cause   = $_POST['medical_cause'] ?? '';
+if ($raw_med_cause === '__other__') {
+    $raw_med_cause = $_POST['client_subcategory'] ?? $_POST['medother_input'] ?? '';
+}
+$medical_cause   = strtoupper($conn->real_escape_string(trim($raw_med_cause)));
+$client_subcat   = $medical_cause; // Direct mapping
+
+// ── 2. Family composition — Encode as JSON ──
 $family_data = [];
 $names    = $_POST['family_name']       ?? [];
 $rels     = $_POST['family_relation']   ?? [];
@@ -47,30 +58,29 @@ foreach ($names as $i => $name) {
 }
 $family_json = $conn->real_escape_string(json_encode($family_data));
 
-// Validate required fields server-side
+// ── 3. Validate Required Fields Server-Side ──
 $errors = [];
-if (!$fname)           $errors[] = "First name is required.";
-if (!$lname)           $errors[] = "Last name is required.";
-if (!$dob)             $errors[] = "Birthdate is required.";
-if (!$sex)             $errors[] = "Sex is required.";
-if (!$civil)           $errors[] = "Civil status is required.";
+if (!$fname)           $errors[] = "Unang Pangalan is required.";
+if (!$lname)           $errors[] = "Apelyido is required.";
+if (!$dob)             $errors[] = "Kapanganakan is required.";
+if (!$sex)             $errors[] = "Kasarian is required.";
+if (!$civil)           $errors[] = "Katayuang Sibil is required.";
 if (!$barangay)        $errors[] = "Barangay is required.";
-if (!$mobile)          $errors[] = "Mobile number is required.";
-if (!$medical_cause)   $errors[] = "Medical cause is required.";
-if (!$assistance_type) $errors[] = "Type of assistance is required.";
-if (!$client_cat)      $errors[] = "Client category is required.";
-if (!$client_subcat)   $errors[] = "Client sub-category is required.";
+if (!$mobile)          $errors[] = "Numero ng Telepono is required.";
+if (!$client_cat)      $errors[] = "Kategorya ng Kliyente is required.";
+if (!$medical_cause)   $errors[] = "Sub-Kategorya (Medical Cause) is required.";
+if (!$assistance_type) $errors[] = "Uri ng Tulong is required.";
 
 if (!empty($errors)) {
-    header("Location: public_form.php?error=" . urlencode(implode(' | ', $errors)));
+    header("Location: public_form.php?err=db_error");
     exit();
 }
 
-// Generate unique application code: AICS-YYYYMMDD-XXXX
+// ── 4. Generate Unique Application Code: AICS-YYYYMMDD-XXXX ──
 $code = "AICS-" . date("Ymd") . "-" . strtoupper(substr(uniqid(), -4));
 
-// ── Duplicate guard: dynamic data checking routing ──
-$status = "PENDING"; // Default application routing state
+// ── 5. Duplicate Guard Check ──
+$status = "PENDING"; // Default application status
 
 $dup_check = $conn->query("
     SELECT id FROM pending_applications
@@ -88,11 +98,17 @@ $phone_check = $conn->query("
     LIMIT 1
 ");
 
-// Kung may nahanap na katulad na Record, ipasok pa rin ngunit baguhin ang katayuan bilang Duplicate Pending
-if (($dup_check && $dup_check->num_rows > 0) || ($phone_check && $phone_check->num_rows > 0)) {
-    $status = "DUPLICATE PENDING";
+if (($dup_check && $dup_check->num_rows > 0)) {
+    header("Location: public_form.php?err=duplicate_name");
+    exit();
 }
 
+if (($phone_check && $phone_check->num_rows > 0)) {
+    header("Location: public_form.php?err=duplicate_phone");
+    exit();
+}
+
+// ── 6. Save Record to Database ──
 $sql = "INSERT INTO pending_applications 
     (application_code, fname, mname, lname, birth_date, sex, civil_status,
      barangay, street, cp_number, occupation, medical_cause, assistance_type, client_category, client_subcategory, family_composition, status)
@@ -101,7 +117,8 @@ $sql = "INSERT INTO pending_applications
      '$barangay', '$street', '$mobile', '$occupation', '$medical_cause', '$assistance_type', '$client_cat', '$client_subcat', '$family_json', '$status')";
 
 if (!$conn->query($sql)) {
-    die("Error saving application: " . $conn->error);
+    header("Location: public_form.php?err=db_error");
+    exit();
 }
 
 $conn->close();
@@ -140,9 +157,6 @@ $today    = date("F d, Y");
         .step-num { width: 24px; height: 24px; background: #003893; color: #fff; border-radius: 50%; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .btn-print { width: 100%; padding: 14px; background: #003893; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: .2s; }
         .btn-print:hover { background: #002a6d; }
-        
-        /* Alert notification context style if system marked as duplicate */
-        .alert-duplicate { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; border-radius: 8px; padding: 12px; font-size: 12px; margin-bottom: 15px; }
 
         @media print { body { background: #fff; } .btn-print, .instruction { display: none; } }
     </style>
@@ -158,12 +172,6 @@ $today    = date("F d, Y");
     <div class="accent-bar"></div>
 
     <div class="card-body">
-
-        <?php if ($status === "DUPLICATE PENDING"): ?>
-            <div class="alert-duplicate">
-                <i class="fas fa-info-circle"></i> <strong>Paunawa:</strong> Ang system ay nakakita ng kahawig na pangalan o numero. Ang iyong aplikasyon ay dadaan sa masusing manual review ng Admin.
-            </div>
-        <?php endif; ?>
 
         <div class="name-row">
             <i class="fas fa-user-circle" style="color:#003893; margin-right:6px;"></i>

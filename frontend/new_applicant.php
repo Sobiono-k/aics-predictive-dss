@@ -1,5 +1,8 @@
 <?php $current_page = 'new_applicant.php'; 
 
+date_default_timezone_set('Asia/Manila');
+
+
 require_once(__DIR__ . '/../db.php');
 
 session_start(); // THIS MUST BE THE VERY FIRST LINE
@@ -15,9 +18,10 @@ require_once 'auth.php';?>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>New Applicant</title>
+    <title>New Applicant - General Intake Sheet</title>
     <link rel="icon" type="image/png" href="<?php echo defined('BASE_URL') ? BASE_URL : '../'; ?>images/dswdlogo2.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
             --dswd-dark: #2c3e50;
@@ -28,9 +32,18 @@ require_once 'auth.php';?>
             --primary: #3b82f6;
             --success: #10b981;
             --dswd-blue: #0038a8;
+            --border: #d1d9e6;
+            --muted: #64748b;
         }
         
-        body {  font-family: 'Inter', sans-serif;  margin: 0;  background: var(--bg-color);  display: grid; grid-template-columns: var(--sidebar-width) 1fr; min-height: 100vh; scrollbar-gutter: stable; 
+        body {  
+            font-family: 'Inter', sans-serif;  
+            margin: 0;  
+            background: var(--bg-color);  
+            display: grid; 
+            grid-template-columns: var(--sidebar-width) 1fr; 
+            min-height: 100vh; 
+            scrollbar-gutter: stable; 
         }
 
         .sidebar { width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); position: fixed; left: 0; top: 0; color: #fff; display: flex; flex-direction: column; z-index: 1000; }
@@ -51,11 +64,6 @@ require_once 'auth.php';?>
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .header-area { margin-bottom: 25px; border-bottom: 2px solid var(--dswd-blue); padding-bottom: 20px; }
-        .header-area h4 { font-size: 12px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; margin: 0 0 4px; }
-        .header-area h1 { color: var(--dswd-dark); font-size: 24px; margin: 0; }
-        .header-area p { color: #8392ab; font-size: 12px; margin: 5px 0 0; }
-
         .alert-success {
             background: #dcfce7;
             color: #166534;
@@ -72,8 +80,66 @@ require_once 'auth.php';?>
 
         .page-content { display: flex; gap: 30px; align-items: flex-start; }
 
-        .form-card { background: white; padding: 30px; border-radius: 12px; box-shadow: var(--card-shadow); flex: 2; min-width: 0; }
-        .checklist-card { background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; width: 450px; box-shadow: var(--card-shadow); overflow: hidden; flex-shrink: 0; }
+        .form-card { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: var(--card-shadow); 
+            flex: 2; 
+            min-width: 0; 
+        }
+
+        /* Header Area matching original clean look */
+        .header-area { margin-bottom: 25px; border-bottom: 2px solid var(--dswd-blue); padding-bottom: 20px; }
+        .header-area h4 { font-size: 12px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; margin: 0 0 4px; }
+        .header-area h1 { color: var(--dswd-dark); font-size: 24px; margin: 0; }
+        .header-area p { color: #8392ab; font-size: 12px; margin: 5px 0 0; }
+
+        /* Intake Classification Grid (Clean styling) */
+        .intake-class-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1.2fr 2fr;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .intake-class-grid > div {
+            padding: 12px 14px;
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 6px;
+        }
+        .intake-class-grid > div:last-child {
+            border-right: none;
+        }
+        .intake-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #334155;
+        }
+        .date-box-wrap {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .date-box {
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            height: 24px;
+            text-align: center;
+            font-size: 11px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+        }
 
         .form-section-title { font-size: 12px; font-weight: 800; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; margin: 25px 0 15px 0; text-transform: uppercase; letter-spacing: 0.5px; }
         .row { display: flex; gap: 15px; margin-bottom: 15px; }
@@ -96,6 +162,7 @@ require_once 'auth.php';?>
         .btn-submit { background: var(--primary); color: white; border: none; padding: 16px; border-radius: 8px; font-weight: 700; cursor: pointer; width: 100%; font-size: 15px; margin-top: 25px; transition: background 0.2s; }
         .btn-submit:hover { background: #2563eb; }
 
+        .checklist-card { background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; width: 450px; box-shadow: var(--card-shadow); overflow: hidden; flex-shrink: 0; }
         .checklist-header { background: #3b82f6; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
         .checklist-body { padding: 20px; font-size: 11.5px; height: 800px; overflow-y: auto; line-height: 1.4; }
         .cat-title { font-weight: 800; color: #1e293b; margin: 15px 0 8px 0; font-size: 10.5px; text-transform: uppercase; border-left: 3px solid #3b82f6; padding-left: 8px; }
@@ -104,11 +171,10 @@ require_once 'auth.php';?>
         .field-error { color:#ef4444; font-size:10.5px; display:none; margin-top:4px; }
 
         @media print {
-            .sidebar, .form-card, .main > div:first-child, .print-btn, .alert-success { display: none !important; }
+            .sidebar, .checklist-card, .print-btn, .alert-success { display: none !important; }
             body { display: block; }
             .main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-            .checklist-card { border: none !important; box-shadow: none !important; width: 100% !important; }
-            .checklist-body { height: auto !important; overflow: visible !important; }
+            .form-card { box-shadow: none !important; border: none !important; width: 100% !important; }
         }
     </style>
 </head>
@@ -132,6 +198,52 @@ require_once 'auth.php';?>
 
     <div class="page-content">
         <div class="form-card">
+            <!-- Intake Classification Grid (Aayos para maging clickable) -->
+            <div class="intake-class-grid">
+                <div>
+                    <div class="intake-row"><label class="option-item"><input type="radio" name="program_type" value="AICS" required checked> AICS</label></div>
+                    <div class="intake-row"><label class="option-item"><input type="radio" name="program_type" value="AKAP"> AKAP</label></div>
+                    <div class="intake-row" style="margin-top:2px; display:flex; align-items:center; gap:6px;">
+                    </div>
+                    <div style="border-bottom: 1.5px solid #cbd5e1; width: 100%; margin-top:2px;"></div>
+                </div>
+
+                <div>
+                    <div class="intake-row"><label class="option-item"><input type="radio" name="client_nature" value="New" required checked> New</label></div>
+                    <div class="intake-row" style="margin-top:4px;"><label class="option-item"><input type="radio" name="client_nature" value="Returning"> Returning</label></div>
+                </div>
+
+                <div>
+                    <div class="intake-row"><label class="option-item"><input type="radio" name="intake_venue" value="Onsite" required checked> Onsite</label></div>
+                    <div class="intake-row"><label class="option-item"><input type="radio" name="intake_venue" value="Malasakit Center"> Malasakit Center</label></div>
+                    <div class="intake-row"><label class="option-item"><input type="radio" name="intake_venue" value="Offsite"> Offsite</label></div>
+                </div>
+
+                <div style="flex-direction:row; align-items:center; justify-content:space-between;">
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        <div class="intake-row"><label class="option-item"><input type="radio" name="intake_mode" value="Walk-in" required checked> Walk-in</label></div>
+                        <div class="intake-row"><label class="option-item"><input type="radio" name="intake_mode" value="Referral"> Referral</label></div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="margin-bottom:4px; font-size:11px;">Date :</div>
+                        <div class="date-box-wrap">
+                            <div style="display:flex; flex-direction:column; align-items:center;">
+                                <div class="date-box" style="width:28px;"><?php echo date('m'); ?></div>
+                                <span style="font-size:8px; font-style:italic; font-weight:400; color:#555; margin-top:2px;">MM</span>
+                            </div>
+                            <div style="display:flex; flex-direction:column; align-items:center;">
+                                <div class="date-box" style="width:28px;"><?php echo date('d'); ?></div>
+                                <span style="font-size:8px; font-style:italic; font-weight:400; color:#555; margin-top:2px;">DD</span>
+                            </div>
+                            <div style="display:flex; flex-direction:column; align-items:center;">
+                                <div class="date-box" style="width:42px;"><?php echo date('Y'); ?></div>
+                                <span style="font-size:8px; font-style:italic; font-weight:400; color:#555; margin-top:2px;">YYYY</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <form action="save_applicant.php" method="POST" id="applicantForm">
                 <div class="row">
                     <div class="col"><label>Date of Request</label><input type="date" name="date" value="<?php echo date('Y-m-d'); ?>" required></div>
@@ -152,7 +264,7 @@ require_once 'auth.php';?>
                 <div class="row">
                     <div class="col">
                         <label>Date of Birth</label>
-                        <input type="date" name="dob" id="dob_input" value="<?php echo (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00') ? date('Y-m-d', strtotime($row['birth_date'])) : ''; ?>" required>
+                        <input type="date" name="dob" id="dob_input" value="" required>
                     </div>
                     <div class="col"><label>Age</label><input type="number" name="age" id="age_input" required></div>
                     <div class="col"><label>Sex</label>
@@ -198,8 +310,8 @@ require_once 'auth.php';?>
                     </div>
                 </div>
 
-                <div class="form-section-title" style="color: #6366f1;">Client Category / Sector</div>
-                <div class="analysis-grid" style="margin-bottom: 15px; background: #f5f3ff; border-color: #c084fc;">
+                <div class="form-section-title">Client Category / Sector</div>
+                <div class="analysis-grid" style="margin-bottom: 15px;">
                     <?php 
                     $categories = [
                         "Family Heads and Other Needy Adult", 
@@ -214,29 +326,20 @@ require_once 'auth.php';?>
                     <?php endforeach; ?>
                 </div>
 
-                <div class="form-section-title" style="color: #a855f7;">Client Subcategory</div>
-                <div class="analysis-grid" style="margin-bottom: 15px; background: #faf5ff; border-color: #e9d5ff;">
+                <div class="form-section-title">Client Subcategory</div>
+                <div class="analysis-grid" style="margin-bottom: 15px;">
                     <?php 
                     $subcategories = [
-                        "Individuals with Cancer",
-                        "Dialysis Patients",
-                        "Chronic Illness / Geriatric Conditions",
-                        "Tuberculosis Patients",
-                        "Rare Disease / Disability caused by Rare Disease",
-                        "Physical Disability / Orthopedically Handicapped",
-                        "Visual Disability / Visually Impaired",
-                        "Hearing/Speech Impaired",
-                        "Psychosocial/Mental/Learning Disability",
-                        "Intellectual Disability / Mentally Challenged",
-                        "Non-apparent Speech and Language Impairment",
-                        "Victims of Disaster",
-                        "Internally Displaced Family",
-                        "Person of Concerns - Asylum Seeker / Refugee / Stateless Persons",
-                        "Physically-abused/maltreated/battered",
-                        "Victims of involuntary prostitution",
-                        "Recovering Person who used Drugs",
-                        "Wounded in Action (WIA)",
-                        "Others specify"
+                        "Speech Impairment",
+                        "Psychosocial Disability",
+                        "Learning Disability",
+                        "Cancer",
+                        "Deaf/Hard-of-Hearing",
+                        "Mental Disability",
+                        "Visual Disability",
+                        "Intellectual Disability",
+                        "Physical Disability",
+                        "Rare Disease"
                     ];
                     foreach($subcategories as $sub): ?>
                         <label class="option-item">
@@ -259,30 +362,21 @@ require_once 'auth.php';?>
                     $incomes = ["Less than 10,000", "10,000 - 20,000", "21,000 - 40,000", "41,000 - 100,000", "101,000 and above"];
                     foreach($incomes as $inc): ?>
                         <label class="option-item">
-                            <input type="radio" name="income" value="<?php echo $inc; ?>" required> <?php echo $inc; ?>
+                            <input type="radio" name="income" value="<?php echo $inc; ?>" required> ₱<?php echo $inc; ?>
                         </label>
                     <?php endforeach; ?>
                 </div>
 
-                <div class="form-section-title">Medical Case Information</div>
-                <div class="row">
-                    <div class="col"><label>DOH Hospital</label><input type="text" name="hospital"></div>
+                <div class="form-section-title">Assistance Type</div>
+                <div class="analysis-grid">
+                     <?php
+                     $assistance_categories = ["Medical Assistance", "Cash Assistance"];
+                     foreach($assistance_categories as $a): ?>
+                        <label class="option-item">
+                            <input type="radio" name="assistance_type" value="<?php echo $a; ?>" required> <?php echo $a; ?>
+                        </label>
+                    <?php endforeach; ?>
                 </div>
-                <div class="row">
-                    <div class="col"><label>Diagnosis</label><input type="text" name="diagnosis"></div>
-                </div>
-
-
-                <div class="form-section-title" style="color: #10b981;">Assistance Category</div>
-<div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
-    <?php
-    $assistance_categories = ["Medicine", "Hospital Bill", "Laboratory / Diagnostic Tests", "Dialysis", "Chemotherapy", "Surgery", "Emergency / Accident Treatment", "Medical Checkup / Consultation", "Others"];
-    foreach($assistance_categories as $a): ?>
-        <label class="option-item">
-            <input type="radio" name="assistance_type" value="<?php echo $a; ?>" required> <?php echo $a; ?>
-        </label>
-    <?php endforeach; ?>
-</div>
 
                 <button type="submit" class="btn-submit">SYNC DATA & REGISTER APPLICANT</button>
             </form>
@@ -295,7 +389,7 @@ require_once 'auth.php';?>
                     <div style="font-size: 11px; opacity: 0.9;">REQUIREMENTS LIST</div>
                 </div>
                 <button onclick="window.open('print_intake_form.php', '_blank')" class="print-btn" style="background: white; color: #3b82f6; border: none; padding: 5px 12px; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 11px;">
-                    <i class="fas fa-print"></i> PRINT
+                    <i class="fas fa-print"></i> PRINT BLANK
                 </button>
             </div>
             <div class="checklist-body">
@@ -389,7 +483,7 @@ document.addEventListener('click', (e) => {
     if (e.target !== input) suggestionBox.style.display = 'none';
 });
 
-// ── 1. Email validation ──
+// Email validation
 const emailInput = document.getElementById('email_input');
 const emailError = document.getElementById('email_error');
 const emailPattern = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
@@ -405,27 +499,24 @@ emailInput.addEventListener('input', function() {
     this.style.borderColor = valid ? '#10b981' : '#ef4444';
 });
 
-// ── 2. Contact number — numeric only, 11-digit PH format ──
+// Contact number validation
 const contactInput = document.getElementById('contact_input');
 const contactError = document.getElementById('contact_error');
 
 contactInput.addEventListener('input', function() {
-    // Strip any non-digit characters as the user types
     this.value = this.value.replace(/\D/g, '').slice(0, 11);
-
     const valid = this.value.length === 11;
     contactError.style.display = (this.value.length > 0 && !valid) ? 'block' : 'none';
     this.style.borderColor = this.value.length === 0 ? '#d2d6da' : (valid ? '#10b981' : '#ef4444');
 });
 
 contactInput.addEventListener('keypress', function(e) {
-    // Block non-numeric keystrokes outright (belt-and-suspenders alongside the input handler above)
     if (!/[0-9]/.test(e.key)) {
         e.preventDefault();
     }
 });
 
-// ── 3. "Others specify" conditional field for Client Subcategory ──
+// Subcategory others toggle
 const subcatRadios = document.getElementsByName('client_subcategory');
 const othersWrap    = document.getElementById('subcat_others_wrap');
 const othersInput   = document.getElementById('subcat_others_input');
@@ -443,7 +534,7 @@ subcatRadios.forEach(radio => {
     });
 });
 
-// ── Final form-level guard before submit ──
+// Form submit guard
 document.getElementById('applicantForm').addEventListener('submit', function(e) {
     let hasError = false;
 
