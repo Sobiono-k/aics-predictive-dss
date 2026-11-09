@@ -1,6 +1,7 @@
 <?php
 // lookup_applicant.php
 date_default_timezone_set('Asia/Manila');
+
 ob_start();
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -52,9 +53,14 @@ if ($qrSettingsResult && $qrSettingsResult->num_rows > 0) {
     $lastQrReset = $qrSettings['updated_at'];
 }
 
-$lastQrResetFormatted = $lastQrReset
-    ? date('F j, Y - g:i A', strtotime($lastQrReset))
-    : 'Not available';
+$lastQrResetFormatted = 'Not available';
+
+if ($lastQrReset) {
+    $utcTime = new DateTime($lastQrReset, new DateTimeZone('UTC'));
+    $utcTime->setTimezone(new DateTimeZone('Asia/Manila'));
+
+    $lastQrResetFormatted = $utcTime->format('F j, Y - g:i A');
+}
 
 
 // --- REMOVE APPLICANT ---
