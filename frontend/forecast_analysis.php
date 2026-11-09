@@ -445,20 +445,92 @@ let hotspotChartInstance = null;
 let currentTab = 'weekly';
 
 function renderMetrics(grain) {
-    const m = GRAINS[grain].metrics;
-    const forecast = GRAINS[grain].forecast.filter(v => v !== null);
-    const actual   = GRAINS[grain].actual.filter(v => v !== null);
-    const peakForecast = forecast.length ? Math.max(...forecast) : 0;
-    const avgActual    = actual.length    ? actual.reduce((a,b) => a+b,0) / actual.length : 0;
+    const g = GRAINS[grain];
+    const m = g.metrics || {};
+
+    // Keep only valid numeric values
+    const validNumbers = arr => (arr || []).filter(
+        v => v !== null && v !== undefined && Number.isFinite(Number(v))
+    ).map(Number);
+
+    // Historical actual values
+    const actual = validNumbers(g.actual);
+
+    // Future forecasts only:
+    // Exclude the historical anchor point where actual is not null.
+    const futureForecast = (g.forecast || []).filter((v, i) =>
+        g.actual[i] === null &&
+        v !== null &&
+        v !== undefined &&
+        Number.isFinite(Number(v))
+    ).map(Number);
+
+    const peakForecast = futureForecast.length
+        ? Math.max(...futureForecast)
+        : null;
+
+    const avgActual = actual.length
+        ? actual.reduce((sum, value) => sum + value, 0) / actual.length
+        : null;
+
+    // Use backend metric when available.
+    let margin95 = Number(m.margin_of_error_95);
+
+    // If missing, estimate it from the first future confidence interval.
+    if (!Number.isFinite(margin95) || margin95 < 0) {
+        const firstFutureIndex = (g.forecast || []).findIndex(
+            (v, i) => g.actual[i] === null && v !== null && v !== undefined
+        );
+
+        const upper = g.forecast_upper?.[firstFutureIndex];
+        const lower = g.forecast_lower?.[firstFutureIndex];
+
+        margin95 = (
+            firstFutureIndex >= 0 &&
+            Number.isFinite(Number(upper)) &&
+            Number.isFinite(Number(lower))
+        )
+            ? (Number(upper) - Number(lower)) / 2
+            : null;
+    }
+
+    const mae = Number(m.mae);
+
+    const formatValue = value =>
+        Number.isFinite(value)
+            ? value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+            : 'N/A';
+
     const cards = [
-        { label: 'Mean Absolute Error',   value: m.mae.toLocaleString(),                       sub: 'Average prediction error (clients/period)', color: '#344767', icon: '' },
-        { label: '95% Confidence Margin', value: '± ' + m.margin_of_error_95.toLocaleString(), sub: 'Forecast uncertainty envelope',             color: '#0d9488', icon: '' },
-        { label: 'Peak Forecast Volume',  value: Math.round(peakForecast).toLocaleString(),     sub: 'Highest projected period',                  color: '#7c3aed', icon: '' },
-        { label: 'Avg Historical Volume', value: Math.round(avgActual).toLocaleString(),        sub: 'Per period (2022 – 2026)',                  color: '#2563eb', icon: '' },
+        {
+            label: 'Mean Absolute Error',
+            value: formatValue(mae),
+            sub: 'Average prediction error (clients/period)',
+            color: '#344767'
+        },
+        {
+            label: '95% Confidence Margin',
+            value: margin95 !== null ? '± ' + formatValue(margin95) : 'N/A',
+            sub: 'Approximate forecast uncertainty',
+            color: '#0d9488'
+        },
+        {
+            label: 'Peak Forecast Volume',
+            value: formatValue(peakForecast !== null ? Math.round(peakForecast) : NaN),
+            sub: 'Highest projected future period',
+            color: '#7c3aed'
+        },
+        {
+            label: 'Avg Historical Volume',
+            value: formatValue(avgActual !== null ? Math.round(avgActual) : NaN),
+            sub: 'Average recorded clients per period',
+            color: '#2563eb'
+        }
     ];
+
     document.getElementById('metricCards').innerHTML = cards.map(c => `
         <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--card-shadow);">
-            <span style="font-size:22px;">${c.icon}</span>
+            <span style="font-size:22px;"></span>
             <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8392ab;">${c.label}</span>
             <span style="font-size:26px;font-weight:800;color:${c.color};">${c.value}</span>
             <span style="font-size:12px;color:#8392ab;">${c.sub}</span>

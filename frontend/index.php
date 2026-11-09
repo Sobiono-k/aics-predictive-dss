@@ -657,19 +657,96 @@ function renderInsightPanelC(grain, forecastVal) {
 }
 
 // ─── Metric cards ─────────────────────────────────────────────────
+
 function renderMetrics(grain) {
-    const g        = GRAINS[grain];
-    const forecast = (g.forecast || []).filter(v => v !== null);
-    const actual   = (g.actual   || []).filter(v => v !== null);
-    const peak     = forecast.length ? Math.max(...forecast) : 0;
-    const avg      = actual.length   ? actual.reduce((a, b) => a + b, 0) / actual.length : 0;
-    const m        = g.metrics || { mae: 0, margin_of_error_95: 0 };
+    const g = GRAINS[grain] || {};
+
+    console.log(`--- ${grain.toUpperCase()} METRICS ---`);
+    console.log("Metrics:", g.metrics);
+    console.log("Forecast:", g.forecast);
+    console.log("Actual:", g.actual);
+
+    const forecast = (g.forecast || []).filter(
+        v => v !== null && v !== undefined && Number.isFinite(Number(v))
+    ).map(Number);
+
+    const actual = (g.actual || []).filter(
+        v => v !== null && v !== undefined && Number.isFinite(Number(v))
+    ).map(Number);
+
+    const peak = forecast.length
+        ? Math.max(...forecast)
+        : 0;
+
+    const avg = actual.length
+        ? actual.reduce((a, b) => a + b, 0) / actual.length
+        : 0;
+
+    const m = g.metrics || {};
+
+    const mae = m.mae == null || !Number.isFinite(Number(m.mae))
+        ? null
+        : Number(m.mae);
+
+    let margin = m.margin_of_error_95 == null
+    ? NaN
+    : Number(m.margin_of_error_95);
+
+    if (!Number.isFinite(margin)) {
+    const futureIndex = (g.forecast || []).findIndex((v, i) =>
+        (g.actual || [])[i] == null && v != null
+    );
+
+    const upper = g.forecast_upper?.[futureIndex];
+    const lower = g.forecast_lower?.[futureIndex];
+
+    if (
+        futureIndex >= 0 &&
+        upper != null &&
+        lower != null &&
+        Number.isFinite(Number(upper)) &&
+        Number.isFinite(Number(lower))
+    ) {
+        margin = (Number(upper) - Number(lower)) / 2;
+    } else {
+        margin = null;
+    }
+}
+
+    const formatNumber = value =>
+        Number(value).toLocaleString(undefined, {
+            maximumFractionDigits: 2
+        });
 
     const cards = [
-        { label:'Mean Absolute Error',   value:Number(m.mae).toLocaleString(),               sub:'Avg prediction error (clients/period)', icon:'', color:'#1e293b' },
-        { label:'95% Confidence Margin', value:'± ' + Number(m.margin_of_error_95).toLocaleString(), sub:'Forecast uncertainty envelope',   icon:'', color:'#0d9488' },
-        { label:'Peak Forecast Volume',  value:Math.round(peak).toLocaleString(),             sub:'Highest projected period',              icon:'', color:'#7c3aed' },
-        { label:'Avg Historical Volume', value:Math.round(avg).toLocaleString(),              sub:'Per period (2022–2026)',                 icon:'', color:'#3b82f6' },
+        {
+            label: 'Mean Absolute Error',
+            value: mae === null ? 'Not available' : formatNumber(mae),
+            sub: 'Avg prediction error (clients/period)',
+            icon: '',
+            color: '#1e293b'
+        },
+        {
+            label: '95% Confidence Margin',
+            value: margin === null ? 'Not available' : '± ' + formatNumber(margin),
+            sub: 'Forecast uncertainty envelope',
+            icon: '',
+            color: '#0d9488'
+        },
+        {
+            label: 'Peak Forecast Volume',
+            value: formatNumber(Math.round(peak)),
+            sub: 'Highest projected period',
+            icon: '',
+            color: '#7c3aed'
+        },
+        {
+            label: 'Avg Historical Volume',
+            value: formatNumber(Math.round(avg)),
+            sub: 'Per period (2022–2026)',
+            icon: '',
+            color: '#3b82f6'
+        }
     ];
 
     document.getElementById('fcMetricCards').innerHTML = cards.map(c => `
@@ -678,7 +755,8 @@ function renderMetrics(grain) {
             <div class="fc-label">${c.label}</div>
             <div class="fc-val" style="color:${c.color}">${c.value}</div>
             <div class="fc-sub">${c.sub}</div>
-        </div>`).join('');
+        </div>
+    `).join('');
 }
 
 // ─── LSTM Chart ───────────────────────────────────────────────────
