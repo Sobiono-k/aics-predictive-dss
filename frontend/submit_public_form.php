@@ -8,6 +8,13 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     exit();
 }
 
+$submittedToken = $_POST['qr_token'] ?? '';
+
+if (!isValidQrToken($conn, $submittedToken)) {
+    http_response_code(403);
+    exit('This application link has expired. Please ask the staff for the latest QR code.');
+}
+
 // ── 1. Collect, Sanitize, and Force UPPERCASE ──
 $fname       = strtoupper($conn->real_escape_string(trim($_POST['fname'] ?? '')));
 $mname       = strtoupper($conn->real_escape_string(trim($_POST['mname'] ?? '')));

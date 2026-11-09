@@ -1,15 +1,61 @@
 <?php
 // lookup_applicant.php
+date_default_timezone_set('Asia/Manila');
 ob_start();
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
 require_once 'auth.php';
-
 require_once(__DIR__ . '/../db.php');
+require_once __DIR__ . '/qr_access.php';
 
 $msg = null;
+
+// CSRF protection
+if (empty($_SESSION['qr_csrf'])) {
+    $_SESSION['qr_csrf'] = bin2hex(random_bytes(32));
+}
+
+// --- RESET QR CODE ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_qr'])) {
+
+    $csrf = $_POST['qr_csrf'] ?? '';
+
+    if (!hash_equals($_SESSION['qr_csrf'], $csrf)) {
+        http_response_code(403);
+        exit('Invalid security token. Please refresh the page.');
+    }
+
+    $newToken = resetActiveQrToken($conn);
+
+    if ($newToken !== false) {
+        header("Location: lookup_applicant.php?msg=qr_reset_success");
+        exit();
+    } else {
+        header("Location: lookup_applicant.php?msg=qr_reset_failed");
+        exit();
+    }
+}
+
+// ADD THE LAST RESET TIMESTAMP CODE HERE
+$activeQrToken = getActiveQrToken($conn);
+
+$qrSettingsResult = $conn->query(
+    "SELECT updated_at FROM application_qr_settings WHERE id = 1 LIMIT 1"
+);
+
+$lastQrReset = null;
+
+if ($qrSettingsResult && $qrSettingsResult->num_rows > 0) {
+    $qrSettings = $qrSettingsResult->fetch_assoc();
+    $lastQrReset = $qrSettings['updated_at'];
+}
+
+$lastQrResetFormatted = $lastQrReset
+    ? date('F j, Y - g:i A', strtotime($lastQrReset))
+    : 'Not available';
+
 
 // --- REMOVE APPLICANT ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_code'])) {
@@ -267,11 +313,47 @@ function pgUrl($p) {
 <?php include 'sidebar.php'; ?>
 
 <div class="main">
+    <?php if (isset($_GET['msg']) && $_GET['msg'] === 'qr_reset_success'): ?>
+    <div class="toast-msg" id="qrToast">
+        <i class="fas fa-check-circle"></i>
+        QR Code successfully reset!
+    </div>
+    <script>
+        setTimeout(() => {
+            const toast = document.getElementById('qrToast');
+            if (toast) toast.style.display = 'none';
+        }, 4000);
+    </script>
+
+<?php elseif (isset($_GET['msg']) && $_GET['msg'] === 'qr_reset_failed'): ?>
+    <div class="toast-msg error" id="qrToast">
+        <i class="fas fa-times-circle"></i>
+        Failed to reset QR Code.
+    </div>
+<?php endif; ?>
 
     <?php if ($msg === 'code_not_found'): ?>
     <div class="toast-msg error" id="toast"><i class="fas fa-times-circle"></i> Code not found or already claimed.</div>
     <script>setTimeout(() => document.getElementById('toast').style.display = 'none', 4000);</script>
     <?php endif; ?>
+
+    <?php if (isset($_GET['msg']) && $_GET['msg'] === 'qr_reset'): ?>
+    <div class="toast-msg" id="qrResetToast">
+        <i class="fas fa-check-circle"></i>
+        QR Code successfully reset! Previous QR links are now invalid.
+    </div>
+    <script>
+        setTimeout(() => {
+            const toast = document.getElementById('qrResetToast');
+            if (toast) toast.style.display = 'none';
+        }, 5000);
+    </script>
+<?php elseif ($msg === 'qr_reset_failed'): ?>
+    <div class="toast-msg error">
+        <i class="fas fa-times-circle"></i>
+        Failed to reset QR Code. Please try again.
+    </div>
+<?php endif; ?>
 
     <!-- Page Header -->
     <div class="header-area">
@@ -561,7 +643,7 @@ function printQR() {
         </style></head>
         <body onload="window.print()">
             <h2>AICS Online Application</h2>
-            <p>I-scan para mag-apply — Batasan Hills Branch</p>
+            <p>I-scan para mag-apply — Batasan Hills Quezon City</p>
             <img src="${qrSrc}" width="260" height="260"><br>
             <div class="url">${url}</div>
         </body></html>`);
@@ -571,8 +653,19 @@ function printQR() {
 
 <!-- ═══ QR CODE MODAL ═══ -->
 <?php
-$form_url = "http://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . "/public_form.php";
-$qr_api   = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&color=003893&bgcolor=ffffff&data=" . urlencode($form_url);
+$scheme = (
+    !empty($_SERVER['HTTPS']) &&
+    $_SERVER['HTTPS'] !== 'off'
+) ? 'https' : 'http';
+
+$basePath = rtrim(dirname($_SERVER['PHP_SELF']), '/\\');
+
+$form_url = $scheme . '://' . $_SERVER['HTTP_HOST']
+    . $basePath . '/public_form.php?token='
+    . urlencode($activeQrToken);
+
+$qr_api = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&color=003893&bgcolor=ffffff&data="
+    . urlencode($form_url);
 ?>
 <div id="qrModal" class="modal-overlay">
     <div class="modal-box" style="width:380px; text-align:center;">
@@ -589,6 +682,20 @@ $qr_api   = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&
             <img id="qrImg" src="<?php echo $qr_api; ?>" width="200" height="200" alt="QR Code" style="display:block;">
         </div>
 
+        <div style="background:#f0f9ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 14px; margin-bottom:18px;">
+    <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase; margin-bottom:5px;">
+        <i class="fas fa-clock"></i> Last QR Code Reset
+    </div>
+
+    <div style="font-size:13px; font-weight:700; color:#1e40af;">
+        <?php echo htmlspecialchars($lastQrResetFormatted); ?>
+    </div>
+
+    <div style="font-size:10px; color:#64748b; margin-top:4px;">
+        Philippine Time (Asia/Manila)
+    </div>
+</div>
+
         <!-- URL display -->
         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; margin-bottom:18px; word-break:break-all;">
             <div style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; margin-bottom:3px;">Form URL</div>
@@ -596,16 +703,30 @@ $qr_api   = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&
         </div>
 
         <!-- Buttons -->
-        <div style="display:flex; gap:10px; justify-content:center;">
-            <button onclick="navigator.clipboard.writeText('<?php echo addslashes($form_url); ?>').then(()=>alert('Link copied!'))"
-                    style="padding:10px 18px; border:1px solid #e2e8f0; background:#fff; border-radius:8px; font-weight:600; cursor:pointer; color:#334155; font-size:13px; display:flex; align-items:center; gap:6px;">
-                <i class="fas fa-copy"></i> Copy Link
-            </button>
-            <button onclick="printQR()"
-                    style="padding:10px 18px; background:#003893; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:6px;">
-                <i class="fas fa-print"></i> Print QR
-            </button>
-        </div>
+<div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+
+    <button onclick="navigator.clipboard.writeText(<?php echo htmlspecialchars(json_encode($form_url), ENT_QUOTES, 'UTF-8'); ?>).then(()=>alert('Link copied!'))"
+            style="padding:10px 14px; border:1px solid #e2e8f0; background:#fff; border-radius:8px; font-weight:600; cursor:pointer; color:#334155; font-size:12px;">
+        <i class="fas fa-copy"></i> Copy Link
+    </button>
+
+    <button onclick="printQR()"
+            style="padding:10px 14px; background:#003893; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:12px;">
+        <i class="fas fa-print"></i> Print QR
+    </button>
+
+    <form method="POST" onsubmit="return confirm('Are you sure you want to reset the QR code? All previously distributed QR links will stop working.');">
+        <input type="hidden" name="reset_qr" value="1">
+        <input type="hidden" name="qr_csrf"
+               value="<?php echo htmlspecialchars($_SESSION['qr_csrf']); ?>">
+
+        <button type="submit"
+                style="padding:10px 14px; background:#dc2626; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:12px;">
+            <i class="fas fa-sync-alt"></i> Reset QR Code
+        </button>
+    </form>
+
+</div>
 
         <p style="font-size:11px; color:#94a3b8; margin-top:14px; margin-bottom:0;">
             <i class="fas fa-info-circle"></i>
