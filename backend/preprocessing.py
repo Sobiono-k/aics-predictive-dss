@@ -1,163 +1,226 @@
-import pandas as pd
+
 import os
-import traceback
+import pandas as pd
 from sqlalchemy import create_engine
 from config import Config
 
+
 # =========================================================
-# DATABASE ENGINE
+# SETTINGS
 # =========================================================
-# Built once at import time from Config.DATABASE_URL (which itself is
-# built from DB_HOST / DB_USER / DB_PASS / DB_NAME / DB_PORT env vars).
+
+ALLOW_CSV_FALLBACK = False
+
+CSV_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "aics_sample_data.csv"
+)
+
 _engine = create_engine(
     Config.DATABASE_URL,
-    connect_args={"ssl": {"ssl_mode": "REQUIRED"}} if Config.DB_HOST not in ('localhost', '127.0.0.1') else {},
+    connect_args=(
+        {"ssl": {"ssl_mode": "REQUIRED"}}
+        if Config.DB_HOST not in ("localhost", "127.0.0.1")
+        else {}
+    ),
     pool_pre_ping=True,
     pool_recycle=3600
 )
 
 
 def get_engine():
-    """
-    Returns the shared SQLAlchemy engine used for both the request data
-    (via load_csv_data, though that currently reads from CSV) and the
-    forecast_cache / training_status tables used by app.py.
-    """
     return _engine
 
 
 # =========================================================
-# LOAD DATA FROM LOCAL CSV
+# DATA LOADING
 # =========================================================
 
 def load_csv_data():
-    """
-    Loads AICS records directly from the Aiven MySQL database engine,
-    with a fallback to the local CSV if database connection fails.
-    """
+
+    df = None
+    source = None
+
+    # -----------------------------------------------------
+    # 1. LOAD FROM DATABASE
+    # -----------------------------------------------------
+
     try:
-        # Attempt to load directly from Aiven MySQL Database table
         query = "SELECT * FROM aics_sample_data"
+
         df = pd.read_sql(query, con=_engine)
-        print("Successfully loaded data from Aiven MySQL database!")
-        
+
+        if df.empty:
+            raise ValueError("Aiven database returned no records.")
+
+        source = "Aiven MySQL"
+
+        print(
+            f"[DATA] Successfully loaded {len(df)} records "
+            f"from Aiven MySQL."
+        )
+
     except Exception as db_err:
-        print(f"Database connection failed: {db_err}. Falling back to local CSV...")
-        
-        # Fallback to local CSV if database is unreachable
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_path = os.path.join(script_dir, 'aics_sample_data.csv')
 
-        if not os.path.exists(csv_path):
-            print(f"CSV file not found at: {csv_path}")
-            return pd.DataFrame()
+        print(f"[DATABASE ERROR] {db_err}")
 
-        read_kwargs = {
-            'sep': None,
-            'engine': 'python',
-            'comment': '#',
-            'on_bad_lines': 'skip'
-        }
+        # -------------------------------------------------
+        # 2. OPTIONAL CSV FALLBACK
+        # -------------------------------------------------
 
-        try:
-            df = pd.read_csv(csv_path, encoding='utf-8', **read_kwargs)
-        except (UnicodeDecodeError, Exception):
-            df = pd.read_csv(csv_path, encoding='latin1', **read_kwargs)
+        if not ALLOW_CSV_FALLBACK:
+            raise RuntimeError(
+                "Unable to load current AICS records from "
+                "Aiven MySQL. CSV fallback is disabled."
+            ) from db_err
 
-    # -------------------------------------------------
-    # COMMON CLEANING PIPELINE (Applies to both DB & CSV)
-    # -------------------------------------------------
+        if not os.path.exists(CSV_PATH):
+            raise FileNotFoundError(
+                f"CSV fallback not found: {CSV_PATH}"
+            )
+
+        df = pd.read_csv(
+            CSV_PATH,
+            encoding="utf-8",
+            sep=None,
+            engine="python",
+            comment="#",
+            on_bad_lines="skip"
+        )
+
+        source = "Local CSV fallback"
+
+        print(
+            f"[WARNING] Using CSV fallback: {len(df)} records."
+        )
+
+    # -----------------------------------------------------
+    # 3. CLEAN DATA
+    # -----------------------------------------------------
+
     if df.empty:
-        print("Dataset is empty.")
-        return pd.DataFrame()
+        raise ValueError("AICS dataset is empty.")
 
-    # Clean quotes and whitespace from headers
-    df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", "")
-    
-    # Find date column dynamically
-    actual_date_col = None
-    for col in df.columns:
-        col_str = str(col).lower()
-        if 'request_date' in col_str or 'date' in col_str:
-            actual_date_col = col
-            break
+    df.columns = (
+        df.columns.astype(str)
+        .str.strip()
+        .str.replace('"', '', regex=False)
+        .str.replace("'", '', regex=False)
+    )
 
-    if actual_date_col is None:
-        print("No request_date column found.")
-        return pd.DataFrame()
+    # Prioritize exact request_date.
+    if "request_date" in df.columns:
+        date_col = "request_date"
+    else:
+        candidates = [
+            col for col in df.columns
+            if "date" in col.lower()
+        ]
 
-    df = df.rename(columns={actual_date_col: 'request_date'})
+        if not candidates:
+            raise ValueError(
+                "No valid request_date column found."
+            )
 
-    # Parse dates safely
-    df['request_date'] = pd.to_datetime(df['request_date'], errors='coerce')
-    df = df.dropna(subset=['request_date'])
+        if len(candidates) > 1:
+            raise ValueError(
+                f"Multiple date columns found: {candidates}. "
+                "Please explicitly identify the request date."
+            )
 
-    # Keep only realistic years
+        date_col = candidates[0]
+
+    if date_col != "request_date":
+        df = df.rename(
+            columns={date_col: "request_date"}
+        )
+
+    df["request_date"] = pd.to_datetime(
+        df["request_date"],
+        errors="coerce"
+    )
+
+    df = df.dropna(
+        subset=["request_date"]
+    )
+
+    today = pd.Timestamp.today().normalize()
+
     df = df[
-        (df['request_date'].dt.year >= 2022) &
-        (df['request_date'].dt.year <= 2030)
-    ]
+        (df["request_date"] >= pd.Timestamp("2022-09-01"))
+        & (df["request_date"] <= today)
+    ].copy()
 
-    # Clean optional columns
-    optional_columns = ['medical_cause', 'assistance_type']
-    for col in optional_columns:
+    if df.empty:
+        raise ValueError(
+            "No valid AICS records remain after date filtering."
+        )
+
+    # Optional columns.
+    for col in ["medical_cause", "assistance_type"]:
         if col not in df.columns:
-            df[col] = 'Unknown'
-        df[col] = df[col].fillna('Unknown')
+            df[col] = "Unknown"
 
-    df = df.sort_values('request_date')
+        df[col] = df[col].fillna("Unknown")
+
+    df = df.sort_values(
+        "request_date"
+    ).reset_index(drop=True)
+
+    # Attach data-source metadata.
+    df.attrs["data_source"] = source
+    df.attrs["latest_record_date"] = (
+        df["request_date"].max().strftime("%Y-%m-%d")
+    )
+
+    print(f"[DATA] Source: {source}")
+    print(f"[DATA] Records: {len(df)}")
+    print(
+        f"[DATA] Latest record: "
+        f"{df.attrs['latest_record_date']}"
+    )
+
     return df
 
+
 # =========================================================
-# CREATE TIME SERIES
+# CONTINUOUS TIME SERIES
 # =========================================================
 
-def create_time_series(df, freq='D'):
-    """
-    Create continuous time-series data
-    with missing dates filled as zero.
-    """
+def create_time_series(df, freq="D"):
 
     if df.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(
+            columns=["request_date", "request_count"]
+        )
 
-    # -------------------------------------------------
-    # GROUP BY FREQUENCY
-    # -------------------------------------------------
     ts = (
         df.groupby(
             pd.Grouper(
-                key='request_date',
+                key="request_date",
                 freq=freq
             )
         )
         .size()
-        .rename('request_count')
-        .to_frame()
+        .rename("request_count")
     )
 
-    # -------------------------------------------------
-    # FILL MISSING DATES
-    # -------------------------------------------------
     full_range = pd.date_range(
         start=ts.index.min(),
         end=ts.index.max(),
         freq=freq
     )
 
-    ts = ts.reindex(full_range, fill_value=0)
+    ts = ts.reindex(
+        full_range,
+        fill_value=0
+    )
 
-    # -------------------------------------------------
-    # RESET INDEX
-    # -------------------------------------------------
-    ts = ts.reset_index()
-
-    ts.columns = [
-        'request_date',
-        'request_count'
-    ]
-
-    return ts
+    return (
+        ts.rename_axis("request_date")
+        .reset_index()
+        .rename(columns={0: "request_count"})
+    )
 
 
 # =========================================================
@@ -165,30 +228,37 @@ def create_time_series(df, freq='D'):
 # =========================================================
 
 def monthly_series():
-    """
-    Generate monthly request totals
-    for LSTM forecasting.
-    """
 
     df = load_csv_data()
 
     if df.empty:
         return pd.Series(dtype=float)
 
-    # -------------------------------------------------
-    # MONTH START FREQUENCY
-    # -------------------------------------------------
-    ts = (
+    monthly = (
         df.groupby(
             pd.Grouper(
-                key='request_date',
-                freq='MS'
+                key="request_date",
+                freq="MS"
             )
         )
         .size()
+        .astype(float)
     )
 
-    return ts.astype(float)
+    full_range = pd.date_range(
+        start=monthly.index.min(),
+        end=monthly.index.max(),
+        freq="MS"
+    )
+
+    monthly = monthly.reindex(
+        full_range,
+        fill_value=0
+    )
+
+    monthly.name = "request_count"
+
+    return monthly
 
 
 # =========================================================
@@ -196,30 +266,28 @@ def monthly_series():
 # =========================================================
 
 def yearly_series():
-    """
-    Generate yearly request totals.
-    """
 
     df = load_csv_data()
 
     if df.empty:
         return pd.Series(dtype=float)
 
-    ts = (
+    yearly = (
         df.groupby(
             pd.Grouper(
-                key='request_date',
-                freq='YS'
+                key="request_date",
+                freq="YS"
             )
         )
         .size()
+        .astype(float)
     )
 
-    return ts.astype(float)
+    return yearly
 
 
 # =========================================================
-# TESTING BLOCK
+# TESTING
 # =========================================================
 
 if __name__ == "__main__":
@@ -228,40 +296,18 @@ if __name__ == "__main__":
 
     data = load_csv_data()
 
-    if not data.empty:
+    print("\nRecords loaded:", len(data))
+    print("Data source:", data.attrs.get("data_source"))
+    print(
+        "Latest record:",
+        data.attrs.get("latest_record_date")
+    )
 
-        print(f"Records Loaded : {len(data)}")
+    print("\nLast 10 daily records:")
+    print(create_time_series(data, "D").tail(10))
 
-        print(
-            f"Date Range     : "
-            f"{data['request_date'].min()} "
-            f"to "
-            f"{data['request_date'].max()}"
-        )
+    print("\nMonthly totals:")
+    print(monthly_series().tail(12))
 
-        # -------------------------------------------------
-        # DAILY SERIES
-        # -------------------------------------------------
-        daily_ts = create_time_series(data)
-
-        print("\nLast 10 Daily Records:")
-        print(daily_ts.tail(10))
-
-        # -------------------------------------------------
-        # MONTHLY SERIES
-        # -------------------------------------------------
-        monthly_ts = monthly_series()
-
-        print("\nMonthly Totals:")
-        print(monthly_ts.tail())
-
-        # -------------------------------------------------
-        # YEARLY SERIES
-        # -------------------------------------------------
-        yearly_ts = yearly_series()
-
-        print("\nYearly Totals:")
-        print(yearly_ts.tail())
-
-    else:
-        print("Data loading failed.")
+    print("\nYearly totals:")
+    print(yearly_series())

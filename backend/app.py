@@ -9,6 +9,7 @@ import traceback
 import threading
 from datetime import datetime, timedelta
 from sqlalchemy import text
+from model_evaluation import evaluate_models
 
 app = Flask(__name__)
 
@@ -115,11 +116,15 @@ def _run_training_job():
 
         set_status("running", "Computing trend forecast…")
         trend_forecast = forecast_next()
+        
+        set_status("running", "Evaluating model performance…")
+        model_evaluation = evaluate_models()
 
         response = {
-            'random_forest': cause_patterns,
-            'lstm': lstm_forecast,
-            'trend_forecast': trend_forecast
+            "random_forest": cause_patterns,
+            "lstm": lstm_forecast,
+            "trend_forecast": trend_forecast,
+            "model_evaluation": model_evaluation
         }
         save_cache(response)
         set_status("done", "Training complete.")

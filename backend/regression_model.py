@@ -1,97 +1,126 @@
-import numpy as np
+
 import json
+import numpy as np
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LinearRegression
 from preprocessing import monthly_series
 
 
-# =========================
-# Trend Forecasting - Linear Regression
-# =========================
-"""
-(Trend Forecasting - Linear Regression):
-- Analyzes chronological request volumes.
-- Identifies overall upward or downward trend.
-- Predicts future request demand using linear projection.
-"""
+WINDOW = 6
+
+
+def _empty_result():
+    return {
+        "prediction": 0,
+        "slope": 0.0,
+        "trend": "Stable",
+        "monthly_impact": 0,
+        "annual_impact": 0
+    }
 
 
 def forecast_next():
+    """Forecast next month's request volume using six-month lag features."""
 
-    # =========================
-    # LOAD DATA
-    # =========================
     series = monthly_series()
 
-    if series is None or len(series) < 2:
-        return {
-            "prediction": 0,
-            "slope": 0,
-            "trend": "Stable",
-            "annual_impact": 0
-        }
+    if series is None or len(series) < WINDOW + 2:
+        return _empty_result()
 
-    values = series.values.astype(float)
+    # Keep chronological order and clean the monthly observations.
+    series = series.sort_index()
+    values = np.asarray(series.values, dtype=float).reshape(-1)
 
-    # =========================
-    # MODEL INPUT
-    # =========================
-    X = np.arange(len(values)).reshape(-1, 1)
-    y = values
+    if not np.all(np.isfinite(values)) or np.any(values < 0):
+        raise ValueError(
+            "Monthly request counts must be finite and non-negative."
+        )
 
-    # =========================
-    # TRAIN MODEL
-    # =========================
+    if len(values) < WINDOW + 2:
+        return _empty_result()
+
+    # Create training examples:
+    # previous six months -> following month's request count.
+    X, y = [], []
+
+    for i in range(WINDOW, len(values)):
+        X.append(values[i - WINDOW:i])
+        y.append(values[i])
+
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y, dtype=float)
+
     model = LinearRegression()
     model.fit(X, y)
 
-    slope = float(model.coef_[0])
-    prediction = model.predict([[len(values)]])[0]
+    # Forecast the month after the latest observed month.
+    latest_window = values[-WINDOW:].reshape(1, WINDOW)
+    raw_prediction = float(model.predict(latest_window)[0])
+    prediction = max(0.0, raw_prediction)
 
-    # =========================
-    # TREND CLASSIFICATION
-    # =========================
-    if slope > 0.05:
+    # Estimate the historical average month-to-month change.
+    # This is descriptive, not the lag model's forecast slope.
+    changes = np.diff(values)
+    slope = float(np.mean(changes)) if len(changes) else 0.0
+
+    average_volume = float(np.mean(values))
+    threshold = 0.01 * average_volume
+
+    if slope > threshold:
         trend = "Increasing"
-    elif slope < -0.05:
+    elif slope < -threshold:
         trend = "Decreasing"
     else:
         trend = "Stable"
 
-    # =========================
-    # FORECAST IMPACT
-    # =========================
-    monthly_impact = slope * 30
-    annual_impact = slope * 365
+    monthly_impact = slope
+    annual_impact = slope * 12
 
-    # =========================
-    # GRAPH VISUALIZATION
-    # =========================
-    plt.figure(figsize=(8,5))
+    # Plot actual counts and the next-month forecast.
+    fig, ax = plt.subplots(figsize=(9, 5))
 
-    # Actual data
-    plt.plot(X, y, label="Actual Requests", marker='o')
+    try:
+        x = np.arange(len(values))
 
-    # Regression line
-    plt.plot(X, model.predict(X), label="Trend Line", linewidth=2)
+        ax.plot(
+            x,
+            values,
+            marker="o",
+            label="Actual Monthly Requests"
+        )
 
-    # Future prediction point
-    plt.scatter(len(values), prediction, color='red', label="Next Prediction")
+        ax.scatter(
+            [len(values)],
+            [prediction],
+            color="red",
+            label="Next-Month Forecast",
+            zorder=3
+        )
 
-    plt.title("Linear Regression - Trend Forecasting")
-    plt.xlabel("Time (Days)")
-    plt.ylabel("Request Volume")
-    plt.legend()
-    plt.grid(True)
+        ax.plot(
+            [len(values) - 1, len(values)],
+            [values[-1], prediction],
+            linestyle="--",
+            label="Forecast Connection"
+        )
 
-    plt.tight_layout()
+        ax.set_title("Linear Regression - Monthly Request Forecast")
+        ax.set_xlabel("Month Index (chronological)")
+        ax.set_ylabel("Request Volume")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
 
-    # =========================
-    # RETURN OUTPUT
-    # =========================
+        # Save the figure here if your application needs a graph file.
+    finally:
+        plt.close(fig)
+
     return {
-        "prediction": int(round(max(0, prediction))),
+        "prediction": int(round(prediction)),
         "slope": round(slope, 3),
         "trend": trend,
         "monthly_impact": int(round(monthly_impact)),
@@ -99,17 +128,11 @@ def forecast_next():
     }
 
 
-# =========================
-# EXECUTION (PHP / API)
-# =========================
 if __name__ == "__main__":
     try:
-        result = forecast_next()
-        print(json.dumps(result))
-    except Exception:
+        print(json.dumps(forecast_next()))
+    except Exception as exc:
         print(json.dumps({
-            "prediction": 0,
-            "slope": 0,
-            "trend": "Stable",
-            "annual_impact": 0
+            **_empty_result(),
+            "error": str(exc)
         }))
