@@ -343,7 +343,7 @@ echo "<script>
         .insight-panel-b .insight-desc{color:#5b21b6}
         .insight-panel-c .insight-desc{color:#155e75}
 
-        #map{height:250px;width:100%;border-radius:8px;margin-top:15px;z-index:1}
+        #map{height:650px;width:100%;border-radius:8px;margin-top:15px;z-index:1}
         .map-stats{display:flex;justify-content:space-between;align-items:center}
 
         /* ── Forecast section ── */

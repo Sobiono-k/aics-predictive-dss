@@ -406,7 +406,7 @@ $conn->close();
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
                 <div>
                     <h3 style="margin:0;font-size:18px;font-weight:700;color:#ef4444;display:flex;align-items:center;gap:8px;" id="hotspotsCardTitle"><span></span> Rising Medical Causes (Hotspots)</h3>
-                    <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">High-velocity growth anomalies identified across specific diagnostics requiring proactive resource staging</p>
+                    <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">High-velocity growth identified across specific diagnostics requiring proactive resource staging</p>
                 </div>
                 <div style="background:#fff1f2;color:#f43f5e;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #fecdd3;font-family:monospace;font-weight:600;">Outbreak Alert</div>
             </div>
@@ -572,7 +572,7 @@ function renderRandomForestPredictions(grain) {
                 <h4 style="margin:0 0 10px;font-size:15px;font-weight:700;color:#344767;">${item.assistance_type}</h4>
                 ${item.status ? `<div style="font-size:11px;padding:4px 10px;border-radius:8px;display:inline-block;margin-bottom:8px;background:${item.status==='Rising'?'#fff1f2':item.status==='Declining'?'#eff6ff':'#f8fafc'};color:${item.status==='Rising'?'#f43f5e':item.status==='Declining'?'#3b82f6':'#64748b'};">${item.status} ${item.growth_rate >= 0 ? '+' : ''}${item.growth_rate ?? 0}%</div>` : ''}
                 <div style="margin-top:12px;">
-                    <div style="font-size:11px;color:#8392ab;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">SHAP-style Feature Contributions</div>
+                    <div style="font-size:11px;color:#8392ab;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Feature Contributions</div>
                     ${shapValues.map(f => `
                         <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;margin-top:5px;">
                             <span style="color:#64748b;width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}</span>
@@ -605,7 +605,7 @@ function renderMedicalHotspots(grain) {
     if (!hotspotData || hotspotData.length === 0) {
         const predictions = (RF_DATA && RF_DATA[grain]) ? RF_DATA[grain].predictions : [];
         if (predictions && predictions.length > 0) {
-            hotspotData = predictions.map((p, i) => ({ cause_name: p.assistance_type, velocity_growth: (85.4 - (i * 14.2) + Math.random() * 5), contributing_factor: "Climatic shifts & seasonal aggregate spikes" })).slice(0, 3);
+            hotspotData = predictions.map((p, i) => ({ cause_name: p.assistance_type, velocity_growth: (85.4 - (i * 14.2) + Math.random() * 5), contributing_factor: "Climatic shifts & seasonal spikes" })).slice(0, 3);
         } else {
             container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8392ab;">No active spots detected.</div>`;
             if (hotspotChartInstance) { hotspotChartInstance.destroy(); hotspotChartInstance = null; }

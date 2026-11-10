@@ -1,100 +1,259 @@
+
 <?php
 // save_applicant.php
+
+date_default_timezone_set('Asia/Manila');
 
 require_once(__DIR__ . '/../db.php');
 
 if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+    die("Database connection failed.");
 }
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // 1. Collect and Sanitize Fields
-    $date             = isset($_POST['date']) ? $conn->real_escape_string($_POST['date']) : '';
-    $firstName        = isset($_POST['fname']) ? $conn->real_escape_string($_POST['fname']) : '';
-    $middleName       = isset($_POST['mname']) ? $conn->real_escape_string($_POST['mname']) : '';
-    $lastName         = isset($_POST['lname']) ? $conn->real_escape_string($_POST['lname']) : '';
-    $sex              = isset($_POST['sex']) ? $conn->real_escape_string($_POST['sex']) : '';
-    $civilStatus      = isset($_POST['civil_status']) ? $conn->real_escape_string($_POST['civil_status']) : 'Not Specified';
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header("Location: new_applicant.php");
+    exit();
+}
 
-    $birthDate        = !empty($_POST['dob']) ? $conn->real_escape_string($_POST['dob']) : '0000-00-00';
+// ------------------------------------------
+// SANITIZE INPUT
+// ------------------------------------------
+function clean($value): string {
+    return trim((string)($value ?? ''));
+}
 
-    $barangay         = isset($_POST['barangay']) ? $conn->real_escape_string($_POST['barangay']) : 'Not Specified';
-    $assistanceType   = isset($_POST['assistance_type']) ? $conn->real_escape_string($_POST['assistance_type']) : 'Not Specified';
-    $clientCategory   = isset($_POST['client_category']) ? $conn->real_escape_string($_POST['client_category']) : 'Not Specified';
+$date = clean($_POST['date'] ?? date('Y-m-d'));
 
-    // ── Kunin ang Subcategory at direktang ilagay sa Medical Cause ──
-    $clientSubcategoryRaw = isset($_POST['client_subcategory']) ? $_POST['client_subcategory'] : '';
-    if ($clientSubcategoryRaw === 'Others specify' && !empty($_POST['client_subcategory_other'])) {
-        $medicalCause = $conn->real_escape_string(trim($_POST['client_subcategory_other']));
-    } else {
-        $medicalCause = $conn->real_escape_string($clientSubcategoryRaw);
+$firstName  = clean($_POST['fname'] ?? '');
+$middleName = clean($_POST['mname'] ?? '');
+$lastName   = clean($_POST['lname'] ?? '');
+
+$birthDate = clean($_POST['dob'] ?? '');
+$age       = clean($_POST['age'] ?? '');
+
+$sex         = clean($_POST['sex'] ?? '');
+$civilStatus = clean($_POST['civil_status'] ?? 'Not Specified');
+
+$barangay = clean($_POST['barangay'] ?? 'Not Specified');
+$city     = clean($_POST['city'] ?? '');
+$street = clean($_POST['street'] ?? '');
+
+$assistanceType = clean($_POST['assistance_type'] ?? 'Not Specified');
+$clientCategory = clean($_POST['client_category'] ?? 'Not Specified');
+
+$clientSubcategoryRaw = clean($_POST['client_subcategory'] ?? '');
+
+if (
+    $clientSubcategoryRaw === 'Others specify' &&
+    !empty($_POST['client_subcategory_other'])
+) {
+    $medicalCause = clean($_POST['client_subcategory_other']);
+} else {
+    $medicalCause = $clientSubcategoryRaw;
+}
+
+$clientSubcategory = $medicalCause;
+
+// ------------------------------------------
+// EMAIL VALIDATION
+// ------------------------------------------
+$email = clean($_POST['email'] ?? '');
+
+if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    die("Invalid email address.");
+}
+
+// ------------------------------------------
+// CONTACT NUMBER VALIDATION
+// ------------------------------------------
+$contact = preg_replace('/\D+/', '', clean($_POST['contact'] ?? ''));
+
+if ($contact !== '' && strlen($contact) !== 11) {
+    die("Contact number must be exactly 11 digits.");
+}
+
+// ------------------------------------------
+// FAMILY COMPOSITION
+// Expected form names:
+// family_name[]
+// family_relation[]
+// family_age[]
+// family_occupation[]
+// family_salary[]
+// ------------------------------------------
+$familyNames      = $_POST['family_name'] ?? [];
+$familyRelations  = $_POST['family_relation'] ?? [];
+$familyAges       = $_POST['family_age'] ?? [];
+$familyOccupations = $_POST['family_occupation'] ?? [];
+$familySalaries   = $_POST['family_salary'] ?? [];
+
+$family = [];
+
+$totalMembers = max(
+    count($familyNames),
+    count($familyRelations),
+    count($familyAges),
+    count($familyOccupations),
+    count($familySalaries)
+);
+
+for ($i = 0; $i < $totalMembers; $i++) {
+
+    $name = clean($familyNames[$i] ?? '');
+    $relation = clean($familyRelations[$i] ?? '');
+    $memberAge = clean($familyAges[$i] ?? '');
+    $occupation = clean($familyOccupations[$i] ?? '');
+    $salary = clean($familySalaries[$i] ?? '');
+
+    // Ignore completely empty household entries.
+    if (
+        $name === '' &&
+        $relation === '' &&
+        $memberAge === '' &&
+        $occupation === '' &&
+        $salary === ''
+    ) {
+        continue;
     }
-    
-    // Pwede rin nating panatilihing pareho o i-set ang client_subcategory kung kailangan sa ibang column
-    $clientSubcategory = $medicalCause; 
 
-    // ── Email: validate server-side too ──
-    $emailRaw = isset($_POST['email']) ? trim($_POST['email']) : '';
-    if ($emailRaw !== '' && !filter_var($emailRaw, FILTER_VALIDATE_EMAIL)) {
-        die("Invalid email address format.");
-    }
-    $email = $conn->real_escape_string($emailRaw);
+    $family[] = [
+        'name'       => $name,
+        'relation'   => $relation,
+        'age'        => $memberAge,
+        'occupation' => $occupation,
+        'salary'     => $salary
+    ];
+}
 
-    // ── Contact Number: strip non-digits, validate length server-side ──
-    $contactRaw = isset($_POST['contact']) ? preg_replace('/\D/', '', $_POST['contact']) : '';
-    if ($contactRaw !== '' && strlen($contactRaw) !== 11) {
-        die("Contact number must be exactly 11 digits.");
-    }
-    $contact = $conn->real_escape_string($contactRaw);
+$familyComposition = json_encode(
+    $family,
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+);
 
-    // 2. Query execution incorporating civil_status, email, and contact
-    $sql = "INSERT INTO aics_sample_data (
-                request_date, 
-                medical_cause, 
-                assistance_type, 
-                status, 
-                fname, 
-                mname, 
-                lname, 
-                birth_date, 
-                sex,
-                civil_status,
-                barangay,
-                client_category,
-                client_subcategory,
-                email,
-                contact_number
-            ) 
-            VALUES (
-                '$date', 
-                '$medicalCause', 
-                '$assistanceType', 
-                'Pending', 
-                '$firstName', 
-                '$middleName', 
-                '$lastName', 
-                '$birthDate', 
-                '$sex',
-                '$civilStatus',
-                '$barangay',
-                '$clientCategory',
-                '$clientSubcategory',
-                '$email',
-                '$contact'
-            )";
+if ($familyComposition === false) {
+    die("Unable to process family composition.");
+}
 
-    if ($conn->query($sql) === TRUE) {
-        $newID = $conn->insert_id;
+// ------------------------------------------
+// CHECK DATABASE COLUMNS
+// ------------------------------------------
+$availableColumns = [];
 
-        // Mag-generate ng Application Code / Reference Code (halimbawa: AICS-2026-0001)
-        $appCode = "AICS-" . date('Y') . "-" . str_pad($newID, 4, '0', STR_PAD_LEFT);
-        $formattedID = "QC-" . $newID; 
+$result = $conn->query("SHOW COLUMNS FROM aics_sample_data");
 
-        // I-save pareho ang id_number at application_code sa database
-        $conn->query("UPDATE aics_sample_data SET id_number = '$formattedID', application_code = '$appCode' WHERE id = $newID");
+if (!$result) {
+    die("Unable to inspect database table: " . $conn->error);
+}
 
-        header("Location: records.php?msg=success&new_id=" . $newID);
-        exit();
+while ($column = $result->fetch_assoc()) {
+    $availableColumns[] = $column['Field'];
+}
+
+$requiredColumns = [
+    'city',
+    'family_composition'
+];
+
+foreach ($requiredColumns as $requiredColumn) {
+    if (!in_array($requiredColumn, $availableColumns, true)) {
+        die(
+            "Missing database column: " . htmlspecialchars($requiredColumn) .
+            ". Please run the database update SQL first."
+        );
     }
 }
+
+// ------------------------------------------
+// PREPARE DATABASE DATA
+// Only insert fields that exist in the table.
+// ------------------------------------------
+$data = [
+    'request_date'       => $date,
+    'medical_cause'      => $medicalCause,
+    'assistance_type'    => $assistanceType,
+    'status'             => 'Pending',
+
+    'fname'              => $firstName,
+    'mname'              => $middleName,
+    'lname'              => $lastName,
+
+    'birth_date'         => $birthDate,
+    'age'                => $age,
+    'sex'                => $sex,
+    'civil_status'       => $civilStatus,
+
+    'barangay'           => $barangay,
+    'city'               => $city,
+    'street'            => $street,
+
+    'client_category'    => $clientCategory,
+    'client_subcategory' => $clientSubcategory,
+
+    'email'              => $email,
+    'contact_number'     => $contact,
+
+    'family_composition' => $familyComposition
+];
+
+// Keep only columns that actually exist.
+$insertData = [];
+
+foreach ($data as $column => $value) {
+    if (in_array($column, $availableColumns, true)) {
+        $insertData[$column] = $value;
+    }
+}
+
+// ------------------------------------------
+// INSERT APPLICANT
+// ------------------------------------------
+$columns = array_keys($insertData);
+
+$columnSQL = '`' . implode('`, `', $columns) . '`';
+$placeholders = implode(', ', array_fill(0, count($columns), '?'));
+
+$sql = "INSERT INTO aics_sample_data ($columnSQL)
+        VALUES ($placeholders)";
+
+$stmt = $conn->prepare($sql);
+
+if (!$stmt) {
+    die("Unable to prepare applicant registration: " . $conn->error);
+}
+
+$values = array_values($insertData);
+$types = str_repeat('s', count($values));
+
+$stmt->bind_param($types, ...$values);
+
+if (!$stmt->execute()) {
+    die("Unable to save applicant: " . $stmt->error);
+}
+
+$newID = $conn->insert_id;
+$stmt->close();
+
+// ------------------------------------------
+// GENERATE APPLICATION REFERENCE CODE
+// ------------------------------------------
+$appCode = "AICS-" . date('Y') . "-" . str_pad($newID, 4, '0', STR_PAD_LEFT);
+$formattedID = "QC-" . $newID;
+
+$update = $conn->prepare("
+    UPDATE aics_sample_data
+    SET id_number = ?, application_code = ?
+    WHERE id = ?
+");
+
+if ($update) {
+    $update->bind_param("ssi", $formattedID, $appCode, $newID);
+    $update->execute();
+    $update->close();
+}
+
+// ------------------------------------------
+// SUCCESS
+// ------------------------------------------
+header("Location: records.php?msg=success&new_id=" . $newID);
+exit();
 ?>

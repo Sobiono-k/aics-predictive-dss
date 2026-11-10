@@ -1175,13 +1175,6 @@ if (!empty($row['family_composition'])) {
                             <input class="edit-input" type="text" name="purpose_<?php echo $i; ?>" value="<?php echo e($row['purpose_' . $i] ?? ''); ?>">
                         </td>
                         <td>
-                            <span class="view-value"><?php echo (!empty($clean_amount)) ? '₱ ' . e($clean_amount) : ''; ?></span>
-                            <div style="display: flex; align-items: center;" class="edit-input">
-                                <span style="padding: 5px 8px; background: #eee; border: 1px solid var(--navy); border-right: none; border-top-left-radius: 4px; border-bottom-left-radius: 4px; font-weight: 600;">₱</span>
-                                <input type="text" name="amount_<?php echo $i; ?>" value="<?php echo e($clean_amount); ?>" style="border: 1px solid var(--navy); border-top-right-radius: 4px; border-bottom-right-radius: 4px; padding: 5px 7px; width: 100%; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600;">
-                            </div>
-                        </td>
-                        <td>
                             <span class="view-value"><?php echo e($row['fund_source_' . $i] ?? ''); ?></span>
                             <input class="edit-input" type="text" name="fund_source_<?php echo $i; ?>" value="<?php echo e($row['fund_source_' . $i] ?? ''); ?>">
                         </td>
