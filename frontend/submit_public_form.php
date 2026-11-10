@@ -2,6 +2,7 @@
 // submit_public_form.php — Receives public_form.php submission, saves to pending_applications, shows reference code
 date_default_timezone_set('Asia/Manila');
 require_once(__DIR__ . '/../db.php');
+require_once __DIR__ . '/qr_access.php'; // Idinagdag para gumana ang isValidQrToken()
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     header("Location: public_form.php");
