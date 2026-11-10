@@ -9,19 +9,22 @@ if ($conn->connect_error) {
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // 1. Collect and Sanitize Fields
-    $date           = $conn->real_escape_string($_POST['date']);
-    $firstName      = $conn->real_escape_string($_POST['fname']);
-    $middleName     = isset($_POST['mname']) ? $conn->real_escape_string($_POST['mname']) : '';
-    $lastName       = $conn->real_escape_string($_POST['lname']);
-    $sex            = $conn->real_escape_string($_POST['sex']);
-    $civilStatus    = isset($_POST['civil_status']) ? $conn->real_escape_string($_POST['civil_status']) : 'Not Specified';
+    $date             = isset($_POST['date']) ? $conn->real_escape_string($_POST['date']) : '';
+    $firstName        = isset($_POST['fname']) ? $conn->real_escape_string($_POST['fname']) : '';
+    $middleName       = isset($_POST['mname']) ? $conn->real_escape_string($_POST['mname']) : '';
+    $lastName         = isset($_POST['lname']) ? $conn->real_escape_string($_POST['lname']) : '';
+    $sex              = isset($_POST['sex']) ? $conn->real_escape_string($_POST['sex']) : '';
+    $civilStatus      = isset($_POST['civil_status']) ? $conn->real_escape_string($_POST['civil_status']) : 'Not Specified';
 
-    $birthDate      = !empty($_POST['dob']) ? $conn->real_escape_string($_POST['dob']) : '0000-00-00';
+    $birthDate        = !empty($_POST['dob']) ? $conn->real_escape_string($_POST['dob']) : '0000-00-00';
 
-    $barangay       = isset($_POST['barangay']) ? $conn->real_escape_string($_POST['barangay']) : 'Not Specified';
-    $medicalCause   = $conn->real_escape_string($_POST['medical_cause']);
-    $assistanceType = isset($_POST['assistance_type']) ? $conn->real_escape_string($_POST['assistance_type']) : 'Not Specified';
-    $clientCategory    = isset($_POST['client_category']) ? $conn->real_escape_string($_POST['client_category']) : 'Not Specified';
+    $barangay         = isset($_POST['barangay']) ? $conn->real_escape_string($_POST['barangay']) : 'Not Specified';
+    
+    // Inayos ang medical_cause para hindi mag-error kung walang laman o hindi naipasa
+    $medicalCause     = isset($_POST['medical_cause']) ? $conn->real_escape_string($_POST['medical_cause']) : 'Not Specified';
+    
+    $assistanceType   = isset($_POST['assistance_type']) ? $conn->real_escape_string($_POST['assistance_type']) : 'Not Specified';
+    $clientCategory   = isset($_POST['client_category']) ? $conn->real_escape_string($_POST['client_category']) : 'Not Specified';
 
     // ── Client Subcategory: use the custom typed text when "Others specify" was chosen ──
     $clientSubcategoryRaw = isset($_POST['client_subcategory']) ? $_POST['client_subcategory'] : 'Not Specified';
@@ -84,7 +87,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($conn->query($sql) === TRUE) {
         $newID = $conn->insert_id;
 
-        // Update id_number format (e.g., QC-0001)ddswr
+        // Update id_number format (e.g., QC-0001)
         $formattedID = "QC-" . $newID; 
         $conn->query("UPDATE aics_sample_data SET id_number = '$formattedID' WHERE id = $newID");
 
@@ -94,4 +97,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         die("Error processing request: " . $conn->error);
     }
 }
-?>   
+?>
