@@ -86,14 +86,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($conn->query($sql) === TRUE) {
         $newID = $conn->insert_id;
 
-        // Update id_number format (e.g., QC-0001)
+        // Mag-generate ng Application Code / Reference Code (halimbawa: AICS-2026-0001)
+        $appCode = "AICS-" . date('Y') . "-" . str_pad($newID, 4, '0', STR_PAD_LEFT);
         $formattedID = "QC-" . $newID; 
-        $conn->query("UPDATE aics_sample_data SET id_number = '$formattedID' WHERE id = $newID");
+
+        // I-save pareho ang id_number at application_code sa database
+        $conn->query("UPDATE aics_sample_data SET id_number = '$formattedID', application_code = '$appCode' WHERE id = $newID");
 
         header("Location: records.php?msg=success&new_id=" . $newID);
         exit();
-    } else {
-        die("Error processing request: " . $conn->error);
     }
 }
 ?>
