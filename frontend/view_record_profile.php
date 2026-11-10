@@ -303,12 +303,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
             $sqlType
         );
 
-        // Lowercase submitted text values.
+        // Convert submitted text values to Title Case.
         if ($value !== '' && $isTextColumn) {
-            $value = function_exists('mb_strtolower')
-                ? mb_strtolower($value, 'UTF-8')
-                : strtolower($value);
-        }
+        $value = function_exists('mb_convert_case')
+        ? mb_convert_case(trim($value), MB_CASE_TITLE, 'UTF-8')
+        : ucwords(strtolower(trim($value)));
+    }
 
         if ($value === '') {
             $value = null;
