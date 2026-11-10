@@ -453,8 +453,8 @@ echo "<script>
             <div style="margin-top:10px" id="rf-trends-container"></div>
 
             <p style="font-size:12px;color:#64748b;margin-top:16px;line-height:1.6;background:#f8fafc;padding:14px;border-radius:8px;border-left:3px solid #3b82f6">
-                <strong>Strategic Insight:</strong> Automated clustering suggests
-                <strong id="live-top-cause"><?php echo htmlspecialchars($topCause); ?></strong> remains the primary driver.
+                <strong>Historical Classification Insight:</strong>
+                <strong id="live-top-cause"><?php echo htmlspecialchars($topCause); ?></strong> represents the largest share of recorded classifications within the selected reporting period.
             </p>
         </div>
     </div>
