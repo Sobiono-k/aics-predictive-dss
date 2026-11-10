@@ -296,10 +296,10 @@ require_once 'auth.php';?>
                 
                 <div class="row">
                     <div class="col" style="position: relative;">
-                        <label>Barangay (Quezon City)</label>
+                        <label>Barangay</label>
                         <input type="text" name="barangay" id="barangay_search" placeholder="Type to search barangay..." autocomplete="off" required>
                         
-                        <div id="brgy_suggestions" style="position: absolute; width: 100%; background: white; border: 1px solid #d2d6da; border-top: none; border-radius: 0 0 6px 6px; z-index: 100; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                        <div id="" style="position: absolute; width: 100%; background: white; border: 1px solid #d2d6da; border-top: none; border-radius: 0 0 6px 6px; z-index: 100; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
                     </div>
                 </div>
 

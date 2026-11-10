@@ -1,93 +1,179 @@
-
 <?php
-// view_record_profile.php
-date_default_timezone_set('Asia/Manila');
+ob_start();
 
-require_once 'auth.php';
-require_once(__DIR__ . '/../db.php');
+date_default_timezone_set('Asia/Manila');
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/../db.php';
+
 function h($value): string {
     return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
 }
 
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
-if ($id <= 0) {
+if (!$id || $id <= 0) {
     exit('Invalid request.');
 }
 
-// CSRF protection
+/* =========================================================
+   CSRF
+========================================================= */
 if (empty($_SESSION['record_profile_token'])) {
     $_SESSION['record_profile_token'] = bin2hex(random_bytes(32));
 }
 
 $token = $_SESSION['record_profile_token'];
 
-function getColumns(mysqli $conn, string $table): array {
-    $columns = [];
-    $result = $conn->query("SHOW COLUMNS FROM `$table`");
+/* =========================================================
+   GET DATABASE COLUMN INFORMATION
+========================================================= */
+$columnInfo = [];
 
-    if ($result) {
-        while ($column = $result->fetch_assoc()) {
-            $columns[] = $column['Field'];
-        }
-    }
+$result = $conn->query("SHOW FULL COLUMNS FROM `aics_sample_data`");
 
-    return $columns;
+if (!$result) {
+    exit('Unable to read database columns: ' . h($conn->error));
 }
 
-$columns = getColumns($conn, 'aics_sample_data');
+while ($column = $result->fetch_assoc()) {
+    $columnInfo[$column['Field']] = $column;
+}
 
-// Fields that may be edited.
-// Only fields actually present in the database will be updated.
-$editableFields = [
-    'application_code',
-    'request_date',
-    'program_type',
-    'client_nature',
-    'intake_venue',
-    'intake_mode',
+$columns = array_keys($columnInfo);
 
-    'fname',
-    'mname',
-    'lname',
-    'ext',
-    'birth_date',
-    'sex',
-    'civil_status',
-    'cp_number',
+/*
+ * Every actual database column is editable except:
+ * - Primary record ID
+ * - Automatically generated columns
+ *
+ * This means new columns added to aics_sample_data
+ * will automatically appear in this profile.
+ */
+$editableFields = [];
 
-    'barangay',
-    'city',
-    'municipality',
-    'province',
-    'region',
-    'address',
-    'street',
+foreach ($columnInfo as $field => $info) {
+    if ($field === 'id') {
+        continue;
+    }
 
-    'assistance_type',
-    'medical_cause',
-    'client_category',
-    'client_subcategory',
-    'purpose',
-    'purpose_of_assistance',
-    'amount',
-    'fund_source',
-    'remarks',
+    if (stripos($info['Extra'] ?? '', 'auto_increment') !== false) {
+        continue;
+    }
 
-    'problem_presented',
-    'social_worker_assessment',
-    'assessment',
-    'occupation',
-    'family_composition'
-];
+    if (stripos($info['Extra'] ?? '', 'GENERATED') !== false) {
+        continue;
+    }
 
-$editableFields = array_values(array_intersect($editableFields, $columns));
+    $editableFields[] = $field;
+}
 
+/* =========================================================
+   FIELD TYPE HELPERS
+========================================================= */
+function getInputType(array $info): string {
+    $type = strtolower($info['Type'] ?? '');
+
+    if (preg_match('/^date\b/', $type)) {
+        return 'date';
+    }
+
+    if (preg_match('/^(datetime|timestamp)\b/', $type)) {
+        return 'datetime-local';
+    }
+
+    if (preg_match('/^(tinyint|smallint|mediumint|int|bigint|decimal|float|double)/', $type)) {
+        return 'number';
+    }
+
+    return 'text';
+}
+
+function isLongField(array $info): bool {
+    $type = strtolower($info['Type'] ?? '');
+
+    return (
+        str_contains($type, 'text') ||
+        str_contains($type, 'json') ||
+        in_array(strtolower($info['Field']), [
+            'remarks',
+            'problem_presented',
+            'social_worker_assessment',
+            'assessment',
+            'family_composition'
+        ], true)
+    );
+}
+
+function displayValue($value, array $info): string {
+    if ($value === null || $value === '') {
+        return '—';
+    }
+
+    $type = strtolower($info['Type'] ?? '');
+
+    if (
+        preg_match('/^(datetime|timestamp)\b/', $type) &&
+        strtotime((string)$value)
+    ) {
+        return date('F d, Y g:i A', strtotime((string)$value));
+    }
+
+    if (
+        preg_match('/^date\b/', $type) &&
+        $value !== '0000-00-00' &&
+        strtotime((string)$value)
+    ) {
+        return date('F d, Y', strtotime((string)$value));
+    }
+
+    return (string)$value;
+}
+
+function fieldLabel(string $field): string {
+    $special = [
+        'id_number' => 'Beneficiary ID Number',
+        'application_code' => 'Application Reference Code',
+        'request_date' => 'Request Date',
+        'fname' => 'First Name',
+        'mname' => 'Middle Name',
+        'lname' => 'Last Name',
+        'ext' => 'Name Extension',
+        'birth_date' => 'Birthdate',
+        'sex' => 'Sex',
+        'civil_status' => 'Civil Status',
+        'cp_number' => 'Contact Number',
+        'contact_number' => 'Contact Number',
+        'client_category' => 'Client Category',
+        'client_subcategory' => 'Client Subcategory',
+        'medical_cause' => 'Medical Cause',
+        'assistance_type' => 'Type of Assistance',
+        'family_composition' => 'Family Composition',
+        'program_type' => 'Program Type',
+        'client_nature' => 'Client Nature',
+        'intake_venue' => 'Intake Venue',
+        'intake_mode' => 'Intake Mode',
+        'fund_source' => 'Fund Source',
+        'amount' => 'Assistance Amount',
+        'purpose' => 'Purpose of Assistance',
+        'problem_presented' => 'Problem Presented',
+        'social_worker_assessment' => 'Social Worker Assessment'
+    ];
+
+    if (isset($special[$field])) {
+        return $special[$field];
+    }
+
+    return ucwords(str_replace('_', ' ', $field));
+}
+
+/* =========================================================
+   SAVE PROFILE
+========================================================= */
 $message = '';
 $messageType = '';
 
@@ -108,22 +194,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
         }
 
         $value = trim((string)$_POST[$field]);
+        $info = $columnInfo[$field];
+        $sqlType = strtolower($info['Type'] ?? '');
 
-        // Empty strings become NULL for optional database fields.
         if ($value === '') {
             $value = null;
         }
 
+        // Convert datetime-local value to MySQL DATETIME format.
+        if ($value !== null && preg_match('/^(datetime|timestamp)\b/', $sqlType)) {
+            $value = str_replace('T', ' ', $value);
+
+            if (strlen($value) === 16) {
+                $value .= ':00';
+            }
+
+            $date = DateTime::createFromFormat('Y-m-d H:i:s', $value);
+
+            if (!$date) {
+                $message = 'Invalid date/time value for ' . fieldLabel($field) . '.';
+                $messageType = 'error';
+                break;
+            }
+
+            $value = $date->format('Y-m-d H:i:s');
+        }
+
+        // Validate DATE fields.
+        if ($value !== null && preg_match('/^date\b/', $sqlType)) {
+            $date = DateTime::createFromFormat('Y-m-d', $value);
+
+            if (!$date || $date->format('Y-m-d') !== $value) {
+                $message = 'Invalid date value for ' . fieldLabel($field) . '.';
+                $messageType = 'error';
+                break;
+            }
+        }
+
+        // Do not put NULL into a NOT NULL column.
+        if ($value === null && ($info['Null'] ?? 'YES') === 'NO') {
+            $value = '';
+        }
+
         $updates[] = "`$field` = ?";
         $values[] = $value;
-        $types .= 's';
+
+        if (preg_match('/^(tinyint|smallint|mediumint|int|bigint)/', $sqlType)) {
+            $types .= 'i';
+        } elseif (preg_match('/^(decimal|float|double)/', $sqlType)) {
+            $types .= 'd';
+        } else {
+            $types .= 's';
+        }
     }
 
-    if (!empty($updates)) {
+    if ($messageType !== 'error' && !empty($updates)) {
 
-        $sql = "UPDATE aics_sample_data SET "
-             . implode(', ', $updates)
-             . " WHERE id = ?";
+        $sql = "UPDATE `aics_sample_data`
+                SET " . implode(', ', $updates) . "
+                WHERE `id` = ?";
 
         $values[] = $id;
         $types .= 'i';
@@ -131,17 +260,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
         $stmt = $conn->prepare($sql);
 
         if (!$stmt) {
-            $message = 'Unable to prepare update: ' . $conn->error;
+            $message = 'Unable to prepare database update: ' . $conn->error;
             $messageType = 'error';
         } else {
+            // Bind parameters by reference for dynamic fields.
+            $bindParams = [$types];
 
-            $stmt->bind_param($types, ...$values);
+            foreach ($values as $key => $value) {
+                $bindParams[] = &$values[$key];
+            }
+
+            call_user_func_array([$stmt, 'bind_param'], $bindParams);
 
             if ($stmt->execute()) {
-                $message = 'Beneficiary profile successfully updated.';
-                $messageType = 'success';
+                $_SESSION['record_profile_flash'] = [
+                    'message' => 'Beneficiary profile successfully updated.',
+                    'type' => 'success'
+                ];
+
+                $stmt->close();
+                header('Location: view_record_profile.php?id=' . $id);
+                exit;
             } else {
-                $message = 'Update failed: ' . $stmt->error;
+                $message = 'Database update failed: ' . $stmt->error;
                 $messageType = 'error';
             }
 
@@ -150,16 +291,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
     }
 }
 
-// Always retrieve the latest saved record.
-$stmt = $conn->prepare("SELECT * FROM aics_sample_data WHERE id = ?");
-$stmt->bind_param("i", $id);
+/* =========================================================
+   FLASH MESSAGE
+========================================================= */
+if (isset($_SESSION['record_profile_flash'])) {
+    $message = $_SESSION['record_profile_flash']['message'];
+    $messageType = $_SESSION['record_profile_flash']['type'];
+
+    unset($_SESSION['record_profile_flash']);
+}
+
+/* =========================================================
+   LOAD LATEST BENEFICIARY RECORD
+========================================================= */
+$stmt = $conn->prepare("SELECT * FROM `aics_sample_data` WHERE `id` = ? LIMIT 1");
+$stmt->bind_param('i', $id);
 $stmt->execute();
 
 $row = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$row) {
-    exit('Record not found.');
+    exit('Beneficiary record not found.');
 }
 
 $fname = $row['fname'] ?? '';
@@ -176,151 +329,205 @@ $fullname = strtoupper(trim(
 
 $printed = date('F d, Y g:i A');
 
-function fieldValue(array $row, string $field, string $fallback = ''): string {
-    return (string)($row[$field] ?? $fallback);
-}
-
-function showField(
-    array $row,
-    string $field,
-    string $label,
-    array $editableFields,
-    string $type = 'text',
-    string $class = ''
-): void {
-
-    $value = fieldValue($row, $field);
-    $editable = in_array($field, $editableFields, true);
-
-    echo '<div class="info-item ' . h($class) . '">';
-    echo '<label>' . h($label) . '</label>';
-
-    echo '<div class="view-value value ' . h($class) . '">'
-       . h($value !== '' ? $value : '—')
-       . '</div>';
-
-    if ($editable) {
-        echo '<input class="edit-input" type="' . h($type) . '"'
-           . ' name="' . h($field) . '"'
-           . ' value="' . h($value) . '">';
-    }
-
-    echo '</div>';
-}
-
-function showTextarea(
-    array $row,
-    string $field,
-    string $label,
-    array $editableFields
-): void {
-
-    $value = fieldValue($row, $field);
-
-    echo '<div class="info-item">';
-    echo '<label>' . h($label) . '</label>';
-
-    echo '<div class="view-value value multiline">'
-       . nl2br(h($value !== '' ? $value : '—'))
-       . '</div>';
-
-    if (in_array($field, $editableFields, true)) {
-        echo '<textarea class="edit-input" name="' . h($field) . '">'
-           . h($value)
-           . '</textarea>';
-    }
-
-    echo '</div>';
-}
-
-function showSelect(
-    array $row,
-    string $field,
-    string $label,
-    array $options,
-    array $editableFields
-): void {
-
-    $value = fieldValue($row, $field);
-
-    echo '<div class="info-item">';
-    echo '<label>' . h($label) . '</label>';
-
-    echo '<div class="view-value value">' . h($value ?: '—') . '</div>';
-
-    if (in_array($field, $editableFields, true)) {
-
-        echo '<select class="edit-input" name="' . h($field) . '">';
-
-        echo '<option value="">Select</option>';
-
-        foreach ($options as $option) {
-            $selected = ($value === $option) ? 'selected' : '';
-            echo '<option value="' . h($option) . '" ' . $selected . '>'
-               . h($option)
-               . '</option>';
-        }
-
-        echo '</select>';
-    }
-
-    echo '</div>';
-}
-
-$family = [];
-
-if (!empty($row['family_composition'])) {
-    $decoded = json_decode($row['family_composition'], true);
-
-    if (is_array($decoded)) {
-        $family = $decoded;
-    }
-}
-
-// Discover optional purpose/amount/fund-source columns.
-$purposeFields = [
-    'purpose_of_assistance',
-    'purpose',
-    'assistance_purpose'
-];
-
-$amountFields = [
-    'amount',
-    'assistance_amount'
-];
-
-$fundFields = [
-    'fund_source',
-    'source_of_fund'
-];
-
-$purposeField = null;
-$amountField = null;
-$fundField = null;
-
-foreach ($purposeFields as $field) {
-    if (in_array($field, $columns, true)) {
-        $purposeField = $field;
-        break;
-    }
-}
-
-foreach ($amountFields as $field) {
-    if (in_array($field, $columns, true)) {
-        $amountField = $field;
-        break;
-    }
-}
-
-foreach ($fundFields as $field) {
-    if (in_array($field, $columns, true)) {
-        $fundField = $field;
-        break;
-    }
-}
+$reference = $row['application_code']
+    ?? $row['id_number']
+    ?? 'N/A';
 
 $status = $row['status'] ?? 'Pending';
-$statusClass = strtolower($status);
+
+$statusClass = in_array(
+    strtolower($status),
+    ['approved', 'claimed', 'completed'],
+    true
+) ? 'claimed' : '';
+
+/* =========================================================
+   ORGANIZE ALL DATABASE FIELDS INTO FORM SECTIONS
+========================================================= */
+$sections = [
+    'classification' => [
+        'title' => 'Application Classification',
+        'icon' => 'fa-clipboard-list',
+        'fields' => [
+            'program_type',
+            'client_nature',
+            'intake_venue',
+            'intake_mode',
+            'request_date',
+            'application_code',
+            'id_number'
+        ]
+    ],
+
+    'personal' => [
+        'title' => 'Part I — Impormasyon ng Benepisyaryo',
+        'subtitle' => "Beneficiary's Identifying Information",
+        'icon' => 'fa-user',
+        'fields' => [
+            'fname',
+            'mname',
+            'lname',
+            'ext',
+            'birth_date',
+            'sex',
+            'civil_status',
+            'occupation',
+            'cp_number',
+            'contact_number',
+            'email'
+        ]
+    ],
+
+    'address' => [
+        'title' => 'Address Information',
+        'icon' => 'fa-location-dot',
+        'fields' => [
+            'street',
+            'address',
+            'barangay',
+            'city',
+            'municipality',
+            'province',
+            'region',
+            'postal_code'
+        ]
+    ],
+
+    'assistance' => [
+        'title' => 'Part II — Detalye ng Tulong',
+        'subtitle' => 'Assistance Details',
+        'icon' => 'fa-hand-holding-medical',
+        'fields' => [
+            'assistance_type',
+            'medical_cause',
+            'client_category',
+            'client_subcategory',
+            'purpose',
+            'purpose_of_assistance',
+            'assistance_purpose',
+            'purpose_1',
+            'purpose_2',
+            'purpose_3',
+            'amount',
+            'assistance_amount',
+            'amount_1',
+            'amount_2',
+            'amount_3',
+            'fund_source',
+            'source_of_fund',
+            'fund_source_1',
+            'fund_source_2',
+            'fund_source_3'
+        ]
+    ],
+
+    'assessment' => [
+        'title' => 'Social Worker Assessment',
+        'icon' => 'fa-clipboard-check',
+        'fields' => [
+            'problem_presented',
+            'social_worker_assessment',
+            'assessment',
+            'remarks',
+            'family_composition'
+        ]
+    ],
+
+    'status' => [
+        'title' => 'Record Status and Other Information',
+        'icon' => 'fa-database',
+        'fields' => [
+            'status'
+        ]
+    ]
+];
+
+// Avoid showing the same field twice.
+$usedFields = [];
+foreach ($sections as &$section) {
+    $section['fields'] = array_values(array_filter(
+        $section['fields'],
+        function ($field) use ($columns, &$usedFields) {
+            if (!in_array($field, $columns, true) || isset($usedFields[$field])) {
+                return false;
+            }
+
+            $usedFields[$field] = true;
+            return true;
+        }
+    ));
+}
+unset($section);
+
+// Any database columns not listed above are still displayed and editable.
+$otherFields = [];
+
+foreach ($editableFields as $field) {
+    if (!isset($usedFields[$field])) {
+        $otherFields[] = $field;
+    }
+}
+
+if (!empty($otherFields)) {
+    $sections['other'] = [
+        'title' => 'Other Database Information',
+        'icon' => 'fa-table',
+        'fields' => $otherFields
+    ];
+}
+
+/* =========================================================
+   RENDER FIELD
+========================================================= */
+function renderProfileField(
+    string $field,
+    array $row,
+    array $columnInfo
+): void {
+
+    $info = $columnInfo[$field];
+    $value = $row[$field] ?? '';
+    $label = fieldLabel($field);
+
+    $long = isLongField($info);
+    $inputType = getInputType($info);
+
+    echo '<div class="info-item">';
+
+    echo '<label>' . h($label) . '</label>';
+
+    if ($long) {
+        echo '<div class="view-value value multiline">'
+            . nl2br(h($value !== '' ? $value : '—'))
+            . '</div>';
+
+        echo '<textarea class="edit-input" name="' . h($field) . '">'
+            . h($value)
+            . '</textarea>';
+
+    } else {
+        $display = displayValue($value, $info);
+
+        echo '<div class="view-value value">'
+            . h($display)
+            . '</div>';
+
+        $inputValue = $value;
+
+        if ($inputType === 'datetime-local' && $inputValue !== '') {
+            $inputValue = str_replace(' ', 'T', substr((string)$inputValue, 0, 16));
+        }
+
+        echo '<input class="edit-input"'
+            . ' type="' . h($inputType) . '"'
+            . ' name="' . h($field) . '"'
+            . ' value="' . h($inputValue) . '"'
+            . ($inputType === 'number' ? ' step="any"' : '')
+            . '>';
+    }
+
+    echo '</div>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -330,10 +537,9 @@ $statusClass = strtolower($status);
 
 <title>General Intake Sheet — <?= h($fullname) ?></title>
 
-<link rel="icon" type="image/png" href="<?= BASE_URL ?>images/dswdlogo2.png">
+<link rel="icon" type="image/png" href="<?= defined('BASE_URL') ? BASE_URL : '' ?>images/dswdlogo2.png">
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
 <style>
@@ -406,8 +612,10 @@ body {
 }
 
 .logo-wrap {display:flex;align-items:center;gap:14px;}
+
 .seal {
-    width:56px;height:56px;
+    width:56px;
+    height:56px;
     background:#fff;
     border-radius:50%;
     display:flex;
@@ -445,42 +653,6 @@ body {
     );
 }
 
-.intake-class-grid {
-    display:grid;
-    grid-template-columns:1.2fr 1fr 1.2fr 1.8fr;
-    border-bottom:2px solid #000;
-    font-size:11px;
-    font-weight:700;
-}
-
-.intake-class-grid > div {
-    padding:10px 12px;
-    border-right:1px solid #000;
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
-    gap:6px;
-}
-
-.intake-row {
-    display:flex;
-    align-items:center;
-    gap:6px;
-    text-transform:uppercase;
-}
-
-.checkbox-box,.circle-box {
-    width:14px;
-    height:14px;
-    border:1px solid #000;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    font-weight:900;
-}
-
-.circle-box {border-radius:50%;}
-
 .code-banner {
     background:var(--light);
     border-bottom:2px solid #000;
@@ -498,9 +670,11 @@ body {
     font-weight:800;
     color:var(--navy);
     letter-spacing:2px;
+    overflow-wrap:anywhere;
 }
 
 .status-pill {
+    display:inline-block;
     padding:4px 12px;
     border-radius:20px;
     font-size:11px;
@@ -542,13 +716,13 @@ body {
 
 .info-grid {
     display:grid;
-    grid-template-columns:repeat(3,1fr);
+    grid-template-columns:repeat(3,minmax(0,1fr));
     gap:12px 20px;
 }
 
-.info-grid.cols-2 {grid-template-columns:1fr 1fr;}
-.info-grid.cols-4 {grid-template-columns:repeat(4,1fr);}
-.info-grid.cols-full {grid-template-columns:1fr;}
+.info-item {
+    min-width:0;
+}
 
 .info-item label {
     font-size:9px;
@@ -567,19 +741,20 @@ body {
     border-radius:3px;
     background:#f8fafc;
     padding:6px 10px;
-    min-height:30px;
+    min-height:32px;
     display:flex;
     align-items:center;
     text-transform:uppercase;
     overflow-wrap:anywhere;
+    white-space:pre-wrap;
 }
 
-.info-item .value.highlight {color:var(--navy);}
-.info-item .value.green {color:#059669;}
 .info-item .value.multiline {
     display:block;
     min-height:80px;
-    white-space:normal;
+    white-space:pre-wrap;
+    text-transform:none;
+    overflow-wrap:anywhere;
 }
 
 .edit-input {
@@ -606,24 +781,6 @@ textarea.edit-input {
 
 .hr {border:0;border-top:1.5px solid #000;}
 
-.family-table {
-    width:100%;
-    border-collapse:collapse;
-    font-size:11px;
-}
-
-.family-table th,.family-table td {
-    border:1px solid #94a3b8;
-    padding:7px 8px;
-    text-align:left;
-}
-
-.family-table th {
-    background:#f1f5f9;
-    font-size:9px;
-    text-transform:uppercase;
-}
-
 .sig-area {
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -641,6 +798,7 @@ textarea.edit-input {
     padding:10px 28px;
     display:flex;
     justify-content:space-between;
+    gap:10px;
     font-size:10px;
     color:rgba(255,255,255,.7);
 }
@@ -669,19 +827,26 @@ textarea.edit-input {
     .toolbar,.alert {display:none!important;}
     .edit-input {display:none!important;}
     .view-value {display:flex!important;}
+    .info-item .value.multiline {display:block!important;}
     .document {
         box-shadow:none;
         max-width:100%;
     }
+
     @page {margin:8mm;size:A4;}
 }
 
 @media(max-width:600px) {
     body {padding:10px;}
-    .info-grid,.info-grid.cols-4 {grid-template-columns:1fr 1fr;}
+    .info-grid {grid-template-columns:1fr 1fr;}
     .sig-area {grid-template-columns:1fr;}
     .doc-header {flex-direction:column;align-items:flex-start;}
     .right-info {text-align:left;}
+    .doc-footer {flex-direction:column;}
+}
+
+@media(max-width:380px) {
+    .info-grid {grid-template-columns:1fr;}
 }
 </style>
 </head>
@@ -700,13 +865,21 @@ textarea.edit-input {
         <i class="fas fa-pen"></i> Edit Profile
     </button>
 
-    <button type="submit" form="profileForm" name="save_profile"
-            value="1" class="btn-toolbar btn-save" id="saveBtn" style="display:none;">
+    <button type="submit"
+            form="profileForm"
+            name="save_profile"
+            value="1"
+            class="btn-toolbar btn-save"
+            id="saveBtn"
+            style="display:none;">
         <i class="fas fa-save"></i> Save Changes
     </button>
 
-    <button type="button" class="btn-toolbar btn-cancel"
-            id="cancelBtn" onclick="cancelEdit()" style="display:none;">
+    <button type="button"
+            class="btn-toolbar btn-cancel"
+            id="cancelBtn"
+            onclick="cancelEdit()"
+            style="display:none;">
         <i class="fas fa-times"></i> Cancel
     </button>
 
@@ -714,7 +887,8 @@ textarea.edit-input {
         <i class="fas fa-print"></i> Print Profile
     </button>
 
-    <button type="button" class="btn-toolbar btn-close"
+    <button type="button"
+            class="btn-toolbar btn-close"
             onclick="window.location.href='records.php'">
         <i class="fas fa-arrow-left"></i> Close
     </button>
@@ -729,6 +903,7 @@ textarea.edit-input {
 
 <div class="document" id="document">
 
+    <!-- HEADER -->
     <div class="doc-header">
         <div class="logo-wrap">
             <div class="seal">🏛️</div>
@@ -748,306 +923,71 @@ textarea.edit-input {
 
     <div class="accent-bar"></div>
 
-    <div class="intake-class-grid">
-        <div>
-            <div class="intake-row">
-                <span class="checkbox-box"><?= ($row['program_type'] ?? '') === 'AICS' ? '✓' : '' ?></span> AICS
-            </div>
-            <div class="intake-row">
-                <span class="checkbox-box"><?= ($row['program_type'] ?? '') === 'AKAP' ? '✓' : '' ?></span> AKAP
-            </div>
-            <div class="intake-row">
-                <span class="checkbox-box"><?= !in_array($row['program_type'] ?? '', ['AICS','AKAP']) && !empty($row['program_type']) ? '✓' : '' ?></span> Others
-            </div>
-        </div>
-
-        <div>
-            <div class="intake-row">
-                <span class="circle-box"><?= ($row['client_nature'] ?? '') === 'NEW' ? '✓' : '' ?></span> New
-            </div>
-            <div class="intake-row">
-                <span class="circle-box"><?= ($row['client_nature'] ?? '') === 'RETURNING' ? '✓' : '' ?></span> Returning
-            </div>
-        </div>
-
-        <div>
-            <div class="intake-row">
-                <span class="checkbox-box"><?= ($row['intake_venue'] ?? '') === 'ONSITE' ? '✓' : '' ?></span> Onsite
-            </div>
-            <div class="intake-row">
-                <span class="checkbox-box"><?= ($row['intake_venue'] ?? '') === 'MALASAKIT CENTER' ? '✓' : '' ?></span> Malasakit Center
-            </div>
-            <div class="intake-row">
-                <span class="checkbox-box"><?= ($row['intake_venue'] ?? '') === 'OFFSITE' ? '✓' : '' ?></span> Offsite
-            </div>
-        </div>
-
-        <div style="display:flex;flex-direction:row;justify-content:space-between;">
-            <div>
-                <div class="intake-row">
-                    <span class="circle-box"><?= ($row['intake_mode'] ?? '') === 'WALK-IN' ? '✓' : '' ?></span> Walk-in
-                </div>
-                <div class="intake-row">
-                    <span class="circle-box"><?= ($row['intake_mode'] ?? '') === 'REFERRAL' ? '✓' : '' ?></span> Referral
-                </div>
-            </div>
-
-            <div style="text-align:center;">
-                <div style="font-size:9px;">Date</div>
-                <?= !empty($row['request_date']) ? h(date('m/d/Y', strtotime($row['request_date']))) : '—' ?>
-            </div>
-        </div>
-    </div>
-
+    <!-- APPLICATION REFERENCE -->
     <div class="code-banner">
         <div>
             <div style="font-size:9px;font-weight:800;color:var(--muted);">
                 APPLICATION REFERENCE CODE
             </div>
-            <div class="code"><?= h($row['application_code'] ?? 'N/A') ?></div>
+            <div class="code"><?= h($reference) ?></div>
         </div>
 
         <div style="text-align:right;">
             <div style="font-size:9px;color:var(--muted);">Submission Status</div>
-            <span class="status-pill <?= in_array($statusClass,['approved','claimed','completed']) ? 'claimed' : '' ?>">
+
+            <span class="status-pill <?= h($statusClass) ?>">
                 <?= h($status) ?>
             </span>
+
             <div style="font-size:9px;margin-top:4px;">
-                Submitted: <?= !empty($row['request_date']) ? h(date('F d, Y g:i A', strtotime($row['request_date']))) : 'N/A' ?>
+                Submitted:
+                <?= !empty($row['request_date'])
+                    ? h(displayValue($row['request_date'], $columnInfo['request_date']))
+                    : 'N/A' ?>
             </div>
         </div>
     </div>
 
-    <div class="section-title">
-        <i class="fas fa-user"></i>
-        Part I — Impormasyon ng Benepisyaryo
-        <span class="sub">(Beneficiary's Identifying Information)</span>
-    </div>
+    <!-- DYNAMIC DATABASE SECTIONS -->
+    <?php foreach ($sections as $sectionKey => $section): ?>
 
-    <div class="info-body">
+        <?php if (empty($section['fields'])) continue; ?>
 
-        <div class="info-grid cols-4" style="margin-bottom:12px;">
-            <?php
-            showField($row,'lname','Apelyido / Last Name',$editableFields);
-            showField($row,'fname','Unang Pangalan / First Name',$editableFields);
-            showField($row,'mname','Gitnang Pangalan / Middle Name',$editableFields);
-            showField($row,'ext','Extension',$editableFields);
-            ?>
+        <div class="section-title <?= $sectionKey === 'assessment' ? 'slate' : '' ?>">
+            <i class="fas <?= h($section['icon']) ?>"></i>
+
+            <?= h($section['title']) ?>
+
+            <?php if (!empty($section['subtitle'])): ?>
+                <span class="sub">(<?= h($section['subtitle']) ?>)</span>
+            <?php endif; ?>
         </div>
 
-        <div class="info-grid cols-4" style="margin-bottom:12px;">
-            <?php
-            showField($row,'birth_date','Kapanganakan / Birthdate',$editableFields,'date');
-            ?>
-            <div class="info-item">
-                <label>Edad / Age</label>
-                <div class="value">
-                    <?php
-                    if (!empty($row['birth_date']) && $row['birth_date'] !== '0000-00-00') {
-                        try {
-                            echo (new DateTime($row['birth_date']))->diff(new DateTime('today'))->y;
-                        } catch (Exception $e) {
-                            echo '—';
-                        }
-                    } else {
-                        echo '—';
-                    }
-                    ?>
-                </div>
+        <div class="info-body">
+            <div class="info-grid">
+
+                <?php foreach ($section['fields'] as $field): ?>
+
+                    <?php renderProfileField($field, $row, $columnInfo); ?>
+
+                <?php endforeach; ?>
+
             </div>
-
-            <?php
-            showSelect($row,'sex','Kasarian / Sex',['MALE','FEMALE'],$editableFields);
-            showSelect($row,'civil_status','Katayuang Sibil / Civil Status',
-                ['SINGLE','MARRIED','WIDOWED','SEPARATED','LIVE-IN'],$editableFields);
-            ?>
         </div>
 
-        <div class="info-grid cols-2" style="margin-bottom:12px;">
-            <?php
-            showField($row,'cp_number','Telepono / Mobile Number',$editableFields);
-            showField($row,'barangay','Barangay',$editableFields);
-            ?>
-        </div>
+        <hr class="hr">
 
-        <div class="info-grid cols-2" style="margin-bottom:12px;">
-            <?php
-            if (in_array('city',$editableFields,true)) {
-                showField($row,'city','Lungsod / City',$editableFields);
-            } elseif (in_array('municipality',$editableFields,true)) {
-                showField($row,'municipality','Lungsod / Municipality',$editableFields);
-            }
+    <?php endforeach; ?>
 
-            if (in_array('region',$editableFields,true)) {
-                showField($row,'region','Rehiyon / Region',$editableFields);
-            } else {
-                echo '<div class="info-item"><label>Region</label><div class="value">'
-                   . h($row['region'] ?? 'NCR')
-                   . '</div></div>';
-            }
-            ?>
-        </div>
-
-        <?php if (in_array('address',$editableFields,true) || in_array('street',$editableFields,true)): ?>
-        <div class="info-grid cols-full">
-            <?php
-            if (in_array('address',$editableFields,true)) {
-                showField($row,'address','Complete Address',$editableFields);
-            } else {
-                showField($row,'street','Street Address',$editableFields);
-            }
-            ?>
-        </div>
-        <?php endif; ?>
-
-    </div>
-
-    <hr class="hr">
-
-    <div class="section-title">
-        <i class="fas fa-hand-holding-medical"></i>
-        Part II — Detalye ng Tulong
-        <span class="sub">(Assistance Details)</span>
-    </div>
-
-    <div class="info-body">
-
-        <div class="info-grid cols-2" style="margin-bottom:12px;">
-            <?php
-            showField($row,'assistance_type','Uri ng Tulong / Type of Assistance',$editableFields);
-            showField($row,'medical_cause','Medical Cause',$editableFields);
-            ?>
-        </div>
-
-        <div class="info-grid cols-2" style="margin-bottom:12px;">
-            <?php
-            showField($row,'client_category','Kategorya ng Kliyente / Client Category',$editableFields);
-            showField($row,'client_subcategory','Sub-Category',$editableFields);
-            ?>
-        </div>
-
-        <div class="info-grid cols-2" style="margin-bottom:12px;">
-            <?php
-            showField($row,'program_type','Program Type',$editableFields);
-            showField($row,'application_code','Application Reference Code',$editableFields);
-            ?>
-        </div>
-
-        <div class="info-grid cols-2" style="margin-bottom:12px;">
-            <?php
-            showField($row,'client_nature','Client Nature',$editableFields);
-            showField($row,'intake_venue','Intake Venue',$editableFields);
-            ?>
-        </div>
-
-        <div class="info-grid cols-2">
-            <?php
-            showField($row,'intake_mode','Intake Mode',$editableFields);
-            showField($row,'request_date','Request Date',$editableFields,'datetime-local');
-            ?>
-        </div>
-
-    </div>
-
-    <hr class="hr">
-
-    <div class="section-title slate">
-        <i class="fas fa-exclamation-circle"></i>
-        PROBLEM PRESENTED
-    </div>
-
-    <div class="info-body">
-        <?php
-        if (in_array('problem_presented',$editableFields,true)) {
-            showTextarea($row,'problem_presented','Problem Presented',$editableFields);
-        } elseif (in_array('remarks',$editableFields,true)) {
-            showTextarea($row,'remarks','Problem Presented / Remarks',$editableFields);
-        } else {
-            echo '<div class="value multiline">'
-               . h($row['remarks'] ?? '—')
-               . '</div>';
-        }
-        ?>
-    </div>
-
-    <hr class="hr">
-
-    <div class="section-title">
-        <i class="fas fa-clipboard-check"></i>
-        Social Worker's Assessment
-        <span class="sub">— Para sa DSWD Personnel</span>
-    </div>
-
-    <div class="info-body">
-        <?php
-        if (in_array('social_worker_assessment',$editableFields,true)) {
-            showTextarea($row,'social_worker_assessment',"Social Worker's Assessment",$editableFields);
-        } elseif (in_array('assessment',$editableFields,true)) {
-            showTextarea($row,'assessment',"Social Worker's Assessment",$editableFields);
-        } else {
-            echo '<div class="value multiline">—</div>';
-        }
-        ?>
-    </div>
-
-    <div class="info-body">
-        <table class="family-table">
-            <thead>
-                <tr>
-                    <th style="width:8%;text-align:center;">#</th>
-                    <th style="width:52%;">Purpose of Assistance</th>
-                    <th style="width:25%;">Amount</th>
-                    <th style="width:15%;">Fund Source</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php for ($i = 0; $i < 3; $i++): ?>
-                <tr>
-                    <td style="text-align:center;"><?= $i + 1 ?></td>
-                    <td>
-                        <?php if ($i === 0 && $purposeField): ?>
-                            <div class="view-value"><?= h($row[$purposeField] ?? '—') ?></div>
-                            <input class="edit-input" name="<?= h($purposeField) ?>"
-                                   value="<?= h($row[$purposeField] ?? '') ?>">
-                        <?php else: ?>
-                            <?= $i === 0 ? h($row['assistance_type'] ?? '—') : '—' ?>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if ($i === 0 && $amountField): ?>
-                            <div class="view-value"><?= h($row[$amountField] ?? '—') ?></div>
-                            <input class="edit-input" type="number" step="0.01"
-                                   name="<?= h($amountField) ?>"
-                                   value="<?= h($row[$amountField] ?? '') ?>">
-                        <?php else: ?>
-                            —
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if ($i === 0 && $fundField): ?>
-                            <div class="view-value"><?= h($row[$fundField] ?? '—') ?></div>
-                            <input class="edit-input" name="<?= h($fundField) ?>"
-                                   value="<?= h($row[$fundField] ?? '') ?>">
-                        <?php else: ?>
-                            —
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endfor; ?>
-            </tbody>
-        </table>
-    </div>
-
-    <?php if (in_array('remarks',$editableFields,true) && !in_array('problem_presented',$editableFields,true)): ?>
-    <div class="info-body">
-        <?php showTextarea($row,'remarks','Additional Remarks',$editableFields); ?>
-    </div>
-    <?php endif; ?>
-
+    <!-- SIGNATURES -->
     <div class="sig-area">
         <div class="sig-box">
             <div class="sig-line"></div>
-            <div style="font-size:11px;font-weight:700;"><?= h($fullname) ?></div>
+
+            <div style="font-size:11px;font-weight:700;">
+                <?= h($fullname) ?>
+            </div>
+
             <div class="sig-label">
                 Buong Pangalan at Pirma ng Kliyente<br>
                 (Signature over Printed Name)
@@ -1056,7 +996,9 @@ textarea.edit-input {
 
         <div class="sig-box">
             <div class="sig-line"></div>
+
             <div style="font-size:11px;font-weight:700;">&nbsp;</div>
+
             <div class="sig-label">
                 Interviewed by / Reviewed & Approved by<br>
                 (Social Worker)
@@ -1064,6 +1006,7 @@ textarea.edit-input {
         </div>
     </div>
 
+    <!-- FOOTER -->
     <div class="doc-footer">
         <span>DSWD Field Office NCR | Batasan Hills Branch | Quezon City</span>
         <span class="gold">AICS — Online Application System</span>
@@ -1115,16 +1058,11 @@ profileForm.addEventListener('submit', function(event) {
         event.preventDefault();
     }
 });
-
-// Convert a saved datetime value to the datetime-local input format.
-document.querySelectorAll('input[type="datetime-local"]').forEach(input => {
-    if (input.value && input.value.includes(' ')) {
-        input.value = input.value.replace(' ', 'T').substring(0, 16);
-    }
-});
 </script>
 
 </body>
 </html>
 
-<?php $conn->close(); ?>
+<?php
+$conn->close();
+?>
