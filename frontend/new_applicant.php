@@ -735,226 +735,224 @@ require_once __DIR__ . '/auth.php';
                 </div>
 
                 <!-- CLIENT CATEGORY -->
-                <div class="form-section-title">Client Category / Sector</div>
+<div class="form-section-title">Client Category / Sector</div>
 
-                <div class="analysis-grid" style="margin-bottom:15px;">
-                    <?php
-                    $categories = [
-                        "Family Heads and Other Needy Adult",
-                        "Persons with Disabilities",
-                        "Senior Citizens",
-                        "Men/Women in Specially Difficult Circumstances"
-                    ];
+<div class="analysis-grid" style="margin-bottom:15px;">
+    <?php
+    $categories = [
+        "Family Heads and Other Needy Adult",
+        "Persons with Disabilities",
+        "Senior Citizens",
+        "Men/Women in Specially Difficult Circumstances"
+    ];
 
-                    foreach ($categories as $cat):
-                    ?>
-                        <label class="option-item">
-                            <input
-                                type="radio"
-                                name="client_category"
-                                value="<?php echo htmlspecialchars($cat, ENT_QUOTES, 'UTF-8'); ?>"
-                                required
-                            >
-                            <?php echo htmlspecialchars($cat); ?>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
+    foreach ($categories as $cat):
+    ?>
+        <label class="option-item">
+            <input
+                type="radio"
+                name="client_category"
+                value="<?php echo htmlspecialchars($cat, ENT_QUOTES, 'UTF-8'); ?>"
+                required
+            >
+            <?php echo htmlspecialchars($cat, ENT_QUOTES, 'UTF-8'); ?>
+        </label>
+    <?php endforeach; ?>
+</div>
 
-                <!-- CLIENT SUBCATEGORY -->
-                <div class="form-section-title">Client Subcategory</div>
+<!-- CLIENT SUBCATEGORY -->
+<div class="form-section-title">Client Subcategory</div>
 
-                <div class="analysis-grid" style="margin-bottom:15px;">
-                    <?php
-                    $subcategories = [
-                        "Speech Impairment",
-                        "Psychosocial Disability",
-                        "Learning Disability",
-                        "Cancer",
-                        "Deaf/Hard-of-Hearing",
-                        "Mental Disability",
-                        "Visual Disability",
-                        "Intellectual Disability",
-                        "Physical Disability",
-                        "Rare Disease"
-                    ];
+<div class="analysis-grid" style="margin-bottom:15px;">
+    <?php
+    $subcategories = [
+        "Speech Impairment",
+        "Psychosocial Disability",
+        "Learning Disability",
+        "Cancer",
+        "Deaf/Hard-of-Hearing",
+        "Mental Disability",
+        "Visual Disability",
+        "Intellectual Disability",
+        "Physical Disability",
+        "Rare Disease",
+        "Others specify"
+    ];
 
-                    foreach ($subcategories as $sub):
-                    ?>
-                        <label class="option-item">
-                            <input
-                                type="radio"
-                                name="client_subcategory"
-                                value="<?php echo htmlspecialchars($sub, ENT_QUOTES, 'UTF-8'); ?>"
-                                required
-                            >
-                            <?php echo htmlspecialchars($sub); ?>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
+    foreach ($subcategories as $sub):
+        $isOther = ($sub === "Others specify");
+    ?>
+        <label class="option-item">
+            <input
+                type="radio"
+                name="client_subcategory"
+                value="<?php echo htmlspecialchars($sub, ENT_QUOTES, 'UTF-8'); ?>"
+                <?php echo $isOther ? 'id="subcat_others_radio"' : ''; ?>
+                required
+            >
+            <?php echo htmlspecialchars($sub, ENT_QUOTES, 'UTF-8'); ?>
+        </label>
+    <?php endforeach; ?>
+</div>
 
-                <div class="row" id="subcat_others_wrap" style="display:none;">
-                    <div class="col">
-                        <label>Please specify Subcategory</label>
-                        <input
-                            type="text"
-                            name="client_subcategory_other"
-                            id="subcat_others_input"
-                            placeholder="Enter specific subcategory"
-                        >
-                    </div>
-                </div>
+<!-- OTHER SUBCATEGORY INPUT -->
+<div class="row" id="subcat_others_wrap" style="display:none;">
+    <div class="col">
+        <label for="subcat_others_input">Please specify Subcategory</label>
+        <input
+            type="text"
+            name="client_subcategory_other"
+            id="subcat_others_input"
+            placeholder="Enter specific subcategory"
+        >
+    </div>
+</div>
 
-                <!-- FAMILY COMPOSITION -->
-                <div class="form-section-title">
-                    Komposisyon ng Pamilya / Family Composition
-                </div>
+<!-- ASSISTANCE TYPE -->
+<div class="form-section-title">Assistance Type</div>
 
-                <div id="family-container">
+<div class="analysis-grid">
+    <?php
+    $assistance_categories = [
+        "Medical Assistance",
+        "Cash Assistance"
+    ];
 
-                    <!-- HOUSEHOLD MEMBER 1 -->
-                    <div class="family-member">
+    foreach ($assistance_categories as $a):
+    ?>
+        <label class="option-item">
+            <input
+                type="radio"
+                name="assistance_type"
+                value="<?php echo htmlspecialchars($a, ENT_QUOTES, 'UTF-8'); ?>"
+                required
+            >
+            <?php echo htmlspecialchars($a, ENT_QUOTES, 'UTF-8'); ?>
+        </label>
+    <?php endforeach; ?>
+</div>
 
-                        <div>
-                            <label>Complete Name</label>
-                            <input type="text" name="family_name[]" placeholder="Full name">
-                        </div>
+<!-- FAMILY COMPOSITION -->
+<div class="form-section-title">
+    Komposisyon ng Pamilya / Family Composition
+</div>
 
-                        <div>
-                            <label>Relationship</label>
-                            <input type="text" name="family_relation[]" placeholder="e.g. Spouse">
-                        </div>
+<div id="family-container">
 
-                        <div>
-                            <label>Age</label>
-                            <input type="number" name="family_age[]" min="0" placeholder="Age">
-                        </div>
-
-                        <div>
-                            <label>Occupation</label>
-                            <input type="text" name="family_occupation[]" placeholder="Occupation">
-                        </div>
-
-                        <div>
-                            <label>Monthly Salary (₱)</label>
-                            <input type="number" name="family_salary[]" min="0" step="0.01" placeholder="0.00">
-                        </div>
-
-                        <div>
-                            <button type="button" class="remove-family-btn" onclick="removeFamilyMember(this)" disabled>
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-
-                    </div>
-
-                    <!-- HOUSEHOLD MEMBER 2 -->
-                    <div class="family-member">
-
-                        <div>
-                            <label>Complete Name</label>
-                            <input type="text" name="family_name[]" placeholder="Full name">
-                        </div>
-
-                        <div>
-                            <label>Relationship</label>
-                            <input type="text" name="family_relation[]" placeholder="e.g. Child">
-                        </div>
-
-                        <div>
-                            <label>Age</label>
-                            <input type="number" name="family_age[]" min="0" placeholder="Age">
-                        </div>
-
-                        <div>
-                            <label>Occupation</label>
-                            <input type="text" name="family_occupation[]" placeholder="Occupation">
-                        </div>
-
-                        <div>
-                            <label>Monthly Salary (₱)</label>
-                            <input type="number" name="family_salary[]" min="0" step="0.01" placeholder="0.00">
-                        </div>
-
-                        <div>
-                            <button type="button" class="remove-family-btn" onclick="removeFamilyMember(this)">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-
-                    </div>
-
-                    <!-- HOUSEHOLD MEMBER 3 -->
-                    <div class="family-member">
-
-                        <div>
-                            <label>Complete Name</label>
-                            <input type="text" name="family_name[]" placeholder="Full name">
-                        </div>
-
-                        <div>
-                            <label>Relationship</label>
-                            <input type="text" name="family_relation[]" placeholder="e.g. Parent">
-                        </div>
-
-                        <div>
-                            <label>Age</label>
-                            <input type="number" name="family_age[]" min="0" placeholder="Age">
-                        </div>
-
-                        <div>
-                            <label>Occupation</label>
-                            <input type="text" name="family_occupation[]" placeholder="Occupation">
-                        </div>
-
-                        <div>
-                            <label>Monthly Salary (₱)</label>
-                            <input type="number" name="family_salary[]" min="0" step="0.01" placeholder="0.00">
-                        </div>
-
-                        <div>
-                            <button type="button" class="remove-family-btn" onclick="removeFamilyMember(this)">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <button type="button" class="add-family-btn" id="add-family-btn">
-                    <i class="fas fa-plus"></i> ADD HOUSEHOLD MEMBER
-                </button>
-
-                <!-- ASSISTANCE TYPE -->
-                <div class="form-section-title">Assistance Type</div>
-
-                <div class="analysis-grid">
-                    <?php
-                    $assistance_categories = [
-                        "Medical Assistance",
-                        "Cash Assistance"
-                    ];
-
-                    foreach ($assistance_categories as $a):
-                    ?>
-                        <label class="option-item">
-                            <input
-                                type="radio"
-                                name="assistance_type"
-                                value="<?php echo htmlspecialchars($a, ENT_QUOTES, 'UTF-8'); ?>"
-                                required
-                            >
-                            <?php echo htmlspecialchars($a); ?>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
-
-                <button type="submit" class="btn-submit">
-                    Submit & Register Applicant
-                </button>
-
-            </form>
+    <!-- HOUSEHOLD MEMBER 1 -->
+    <div class="family-member">
+        <div>
+            <label>Complete Name</label>
+            <input type="text" name="family_name[]" placeholder="Full name">
         </div>
+
+        <div>
+            <label>Relationship</label>
+            <input type="text" name="family_relation[]" placeholder="e.g. Spouse">
+        </div>
+
+        <div>
+            <label>Age</label>
+            <input type="number" name="family_age[]" min="0" placeholder="Age">
+        </div>
+
+        <div>
+            <label>Occupation</label>
+            <input type="text" name="family_occupation[]" placeholder="Occupation">
+        </div>
+
+        <div>
+            <label>Monthly Salary (₱)</label>
+            <input type="number" name="family_salary[]" min="0" step="0.01" placeholder="0.00">
+        </div>
+
+        <div>
+            <button type="button" class="remove-family-btn" onclick="removeFamilyMember(this)" disabled>
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- HOUSEHOLD MEMBER 2 -->
+    <div class="family-member">
+        <div>
+            <label>Complete Name</label>
+            <input type="text" name="family_name[]" placeholder="Full name">
+        </div>
+
+        <div>
+            <label>Relationship</label>
+            <input type="text" name="family_relation[]" placeholder="e.g. Child">
+        </div>
+
+        <div>
+            <label>Age</label>
+            <input type="number" name="family_age[]" min="0" placeholder="Age">
+        </div>
+
+        <div>
+            <label>Occupation</label>
+            <input type="text" name="family_occupation[]" placeholder="Occupation">
+        </div>
+
+        <div>
+            <label>Monthly Salary (₱)</label>
+            <input type="number" name="family_salary[]" min="0" step="0.01" placeholder="0.00">
+        </div>
+
+        <div>
+            <button type="button" class="remove-family-btn" onclick="removeFamilyMember(this)">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- HOUSEHOLD MEMBER 3 -->
+    <div class="family-member">
+        <div>
+            <label>Complete Name</label>
+            <input type="text" name="family_name[]" placeholder="Full name">
+        </div>
+
+        <div>
+            <label>Relationship</label>
+            <input type="text" name="family_relation[]" placeholder="e.g. Parent">
+        </div>
+
+        <div>
+            <label>Age</label>
+            <input type="number" name="family_age[]" min="0" placeholder="Age">
+        </div>
+
+        <div>
+            <label>Occupation</label>
+            <input type="text" name="family_occupation[]" placeholder="Occupation">
+        </div>
+
+        <div>
+            <label>Monthly Salary (₱)</label>
+            <input type="number" name="family_salary[]" min="0" step="0.01" placeholder="0.00">
+        </div>
+
+        <div>
+            <button type="button" class="remove-family-btn" onclick="removeFamilyMember(this)">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<button type="button" class="add-family-btn" id="add-family-btn">
+    <i class="fas fa-plus"></i> ADD HOUSEHOLD MEMBER
+</button>
+
+<button type="submit" class="btn-submit">
+    Submit & Register Applicant
+</button>
+</form>
+</div>
+
 
         <!-- REQUIREMENTS CHECKLIST -->
         <div class="checklist-card">
