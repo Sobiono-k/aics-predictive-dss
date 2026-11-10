@@ -1,10 +1,6 @@
-
 <?php
-// view_record_profile.php — DSWD General Intake Sheet
-// Confirmed beneficiary records: aics_sample_data
-// Inline editing and saving on the same page.
-
 ob_start();
+
 date_default_timezone_set('Asia/Manila');
 
 if (session_status() === PHP_SESSION_NONE) {

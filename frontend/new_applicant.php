@@ -1,21 +1,20 @@
-
 <?php
-$current_page = 'new_applicant.php';
+ob_start();
 
 date_default_timezone_set('Asia/Manila');
-
-require_once(__DIR__ . '/../db.php');
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once __DIR__ . '/../db.php';
+
 if (!isset($_SESSION['role'])) {
-    header("Location: login.php");
+    header('Location: login.php');
     exit();
 }
 
-require_once 'auth.php';
+require_once __DIR__ . '/auth.php';
 ?>
 
 <!DOCTYPE html>
