@@ -19,22 +19,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $birthDate        = !empty($_POST['dob']) ? $conn->real_escape_string($_POST['dob']) : '0000-00-00';
 
     $barangay         = isset($_POST['barangay']) ? $conn->real_escape_string($_POST['barangay']) : 'Not Specified';
-    
-    // Inayos ang medical_cause para hindi mag-error kung walang laman o hindi naipasa
-    $medicalCause     = isset($_POST['medical_cause']) ? $conn->real_escape_string($_POST['medical_cause']) : 'Not Specified';
-    
     $assistanceType   = isset($_POST['assistance_type']) ? $conn->real_escape_string($_POST['assistance_type']) : 'Not Specified';
     $clientCategory   = isset($_POST['client_category']) ? $conn->real_escape_string($_POST['client_category']) : 'Not Specified';
 
-    // ── Client Subcategory: use the custom typed text when "Others specify" was chosen ──
-    $clientSubcategoryRaw = isset($_POST['client_subcategory']) ? $_POST['client_subcategory'] : 'Not Specified';
+    // ── Kunin ang Subcategory at direktang ilagay sa Medical Cause ──
+    $clientSubcategoryRaw = isset($_POST['client_subcategory']) ? $_POST['client_subcategory'] : '';
     if ($clientSubcategoryRaw === 'Others specify' && !empty($_POST['client_subcategory_other'])) {
-        $clientSubcategory = $conn->real_escape_string(trim($_POST['client_subcategory_other']));
+        $medicalCause = $conn->real_escape_string(trim($_POST['client_subcategory_other']));
     } else {
-        $clientSubcategory = $conn->real_escape_string($clientSubcategoryRaw);
+        $medicalCause = $conn->real_escape_string($clientSubcategoryRaw);
     }
+    
+    // Pwede rin nating panatilihing pareho o i-set ang client_subcategory kung kailangan sa ibang column
+    $clientSubcategory = $medicalCause; 
 
-    // ── Email: validate server-side too (never trust client-side validation alone) ──
+    // ── Email: validate server-side too ──
     $emailRaw = isset($_POST['email']) ? trim($_POST['email']) : '';
     if ($emailRaw !== '' && !filter_var($emailRaw, FILTER_VALIDATE_EMAIL)) {
         die("Invalid email address format.");
