@@ -1,7 +1,6 @@
-
 <?php
-// save_applicant.php
 ob_start();
+
 date_default_timezone_set('Asia/Manila');
 
 require_once(__DIR__ . '/../db.php');
@@ -14,7 +13,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: new_applicant.php");
     exit();
 }
-
 // ------------------------------------------
 // SANITIZE INPUT
 // ------------------------------------------
@@ -254,7 +252,12 @@ if ($update) {
 // ------------------------------------------
 // SUCCESS
 // ------------------------------------------
-ob_end_clean();
+$stmt = null;
+
+if (ob_get_level() > 0) {
+    ob_end_clean();
+}
+
 header("Location: records.php?msg=success&new_id=" . $newID);
 exit();
 ?>
