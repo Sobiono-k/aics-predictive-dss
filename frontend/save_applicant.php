@@ -1,7 +1,7 @@
 
 <?php
 // save_applicant.php
-
+ob_start();
 date_default_timezone_set('Asia/Manila');
 
 require_once(__DIR__ . '/../db.php');
@@ -254,6 +254,7 @@ if ($update) {
 // ------------------------------------------
 // SUCCESS
 // ------------------------------------------
+ob_end_clean();
 header("Location: records.php?msg=success&new_id=" . $newID);
 exit();
 ?>
